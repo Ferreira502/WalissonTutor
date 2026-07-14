@@ -1,7 +1,13 @@
 import cors from 'cors';
 import crypto from 'node:crypto';
 import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import rateLimit from 'express-rate-limit';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendDistPath = path.resolve(__dirname, '../frontend/dist');
 
 const app = express();
 const cache = new Map();
@@ -137,6 +143,7 @@ function parseStdoutValue(statement, variables, heap, language) {
   if (pointerDereference) {
     const pointer = findVariable(variables, pointerDereference[1]);
     const target = variables.find((variable) => variable.address === pointer?.reference);
+
     if (target) {
       return String(target.value);
     }
@@ -146,6 +153,7 @@ function parseStdoutValue(statement, variables, heap, language) {
   if (indexedAccess) {
     const heapItem = getHeapItemByOwner(variables, heap, indexedAccess[1]);
     const value = heapItem?.values?.[Number(indexedAccess[2])];
+
     if (value !== undefined) {
       return String(value);
     }
@@ -331,9 +339,11 @@ function trace(language, code) {
     match = statement.match(/^(\w+)\[(\d+)\]\s*=\s*(-?\d+)\s*;/);
     if (match) {
       const heapItem = getHeapItemByOwner(variables, heap, match[1]);
+
       if (heapItem?.values) {
         heapItem.values[Number(match[2])] = Number(match[3]);
       }
+
       pushStep(lineIndex, 'heap_write', `Write ${match[3]} to ${match[1]}[${match[2]}]`);
       return;
     }
@@ -363,9 +373,11 @@ function trace(language, code) {
     if (match) {
       const owner = findVariable(variables, match[1]);
       const heapItem = heap.find((item) => item.address === owner?.reference);
+
       if (heapItem?.fields) {
         heapItem.fields[match[2]] = match[3] ?? Number(match[4]);
       }
+
       pushStep(lineIndex, 'field_write', `Update ${match[1]}.${match[2]}`);
       return;
     }
@@ -396,9 +408,11 @@ function trace(language, code) {
     if (match) {
       const owner = findVariable(variables, match[1]);
       const heapItem = heap.find((item) => item.address === owner?.reference);
+
       if (heapItem) {
         heapItem.freed = true;
       }
+
       pushStep(lineIndex, 'heap_free', `Release memory owned by "${match[1]}"`);
       return;
     }
@@ -431,6 +445,7 @@ app.post('/api/run', (req, res) => {
     const result = trace(req.body.language, req.body.code);
     cache.set(hash, result);
     setTimeout(() => cache.delete(hash), 600000);
+
     return res.json(result);
   } catch (error) {
     return res.status(400).json({ error: error.message });
@@ -445,11 +460,26 @@ app.get('/api/cached/:hash', (req, res) => {
   return res.status(404).json({ error: 'Trace not found' });
 });
 
-app.get('/api/languages', (_, res) => res.json([{ id: 'c', label: 'C' }, { id: 'cpp', label: 'C++' }, { id: 'java', label: 'Java' }]));
-app.get('/api/health', (_, res) => res.json({ status: 'ok', sandbox: 'simulated', cache: 'memory' }));
+app.get('/api/languages', (_, res) => {
+  res.json([
+    { id: 'c', label: 'C' },
+    { id: 'cpp', label: 'C++' },
+    { id: 'java', label: 'Java' },
+  ]);
+});
 
-app.use(express.static('dist'));
-app.use((req, res) => res.sendFile('index.html', { root: 'dist' }));
+app.get('/api/health', (_, res) => {
+  res.json({
+    status: 'ok',
+    sandbox: 'simulated',
+    cache: 'memory',
+  });
+});
+
+app.use(express.static(frontendDistPath));
+app.use((_, res) => {
+  res.sendFile(path.join(frontendDistPath, 'index.html'));
+});
 
 app.listen(3001, () => {
   console.log('CodeVisualizer API running at http://localhost:3001');
