@@ -8,12 +8,13 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Code2,
   Gauge,
   Layers3,
+  Moon,
   Pause,
   Play,
   RotateCcw,
+  Sun,
   Terminal,
   WandSparkles,
   ZoomIn,
@@ -21,7 +22,6 @@ import {
 import { animated, useSpring, useSprings, useTransition } from '@react-spring/web';
 import {
   Background,
-  Controls,
   Handle,
   Position,
   ReactFlow,
@@ -68,6 +68,7 @@ function CodeVisualizerApp() {
   const [executionStatus, setExecutionStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [executionError, setExecutionError] = useState('');
   const [lineTooltipVisible, setLineTooltipVisible] = useState(false);
+  const [lightModeEnabled, setLightModeEnabled] = useState(false);
 
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<{ Range: typeof Range } | null>(null);
@@ -165,23 +166,21 @@ function CodeVisualizerApp() {
   const playbackSpeeds: PlaybackSpeed[] = [0.5, 1, 2, 4];
 
   return (
-    <div className="app">
+    <div className={`app ${lightModeEnabled ? 'lightTheme' : ''}`}>
       <header>
-        <div className="brand">
-          <span>
-            <Code2 />
-          </span>
-
-          <div>
-            <b>CodeVisualizer</b>
-            <small>Timeline animada de stack, heap e ponteiros</small>
-          </div>
+        <div className="brand brandMinimal">
+          <b>WALISSONTUTOR</b>
         </div>
 
-        <div className="ready">
-          <i />
-          React Flow + React Spring prontos
-        </div>
+        <button
+          type="button"
+          className="themeToggle"
+          aria-label={lightModeEnabled ? 'Ativar modo escuro' : 'Ativar modo claro'}
+          title={lightModeEnabled ? 'Modo escuro' : 'Modo claro'}
+          onClick={() => setLightModeEnabled((enabled) => !enabled)}
+        >
+          {lightModeEnabled ? <Sun /> : <Moon />}
+        </button>
       </header>
 
       <main>
@@ -220,7 +219,7 @@ function CodeVisualizerApp() {
                 value={sourceCode}
                 onMount={handleEditorMount}
                 onChange={(value) => setSourceCode(value ?? '')}
-                theme="vs-dark"
+                theme={lightModeEnabled ? 'vs' : 'vs-dark'}
                 options={{
                   fontSize: 14,
                   fontFamily: 'JetBrains Mono',
@@ -510,7 +509,6 @@ function MemoryDiagram({
             proOptions={{ hideAttribution: true }}
           >
             <Background gap={22} size={1} color="#1b2432" />
-            <Controls showInteractive={false} position="bottom-right" />
           </ReactFlow>
         </ReactFlowProvider>
 
