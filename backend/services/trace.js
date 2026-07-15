@@ -20,7 +20,26 @@ function getHeapItemByOwner(variables, heap, ownerName) {
 
 function parseStdoutValue(statement, variables, heap, language) {
   if (language === 'java') {
-    return String(heap[0]?.fields?.name ?? 'Ada');
+    const fieldAccess = statement.match(/System\.out\.println\(\s*(\w+)\.(\w+)\s*\)/);
+    if (fieldAccess) {
+      const owner = findVariable(variables, fieldAccess[1]);
+      const heapItem = heap.find((item) => item.address === owner?.reference);
+      const fieldValue = heapItem?.fields?.[fieldAccess[2]];
+
+      if (fieldValue !== undefined) {
+        return String(fieldValue);
+      }
+    }
+
+    const variableAccess = statement.match(/System\.out\.println\(\s*(\w+)\s*\)/);
+    if (variableAccess) {
+      const variable = findVariable(variables, variableAccess[1]);
+      if (variable) {
+        return String(variable.value);
+      }
+    }
+
+    return String(heap[0]?.fields?.nome ?? heap[0]?.fields?.name ?? 'null');
   }
 
   const pointerDereference = statement.match(/\*(\w+)/);
@@ -198,7 +217,7 @@ export function traceCode(language, code) {
       return;
     }
 
-    match = statement.match(/^(\w+)\s*=\s*new\s+(\w+)\s*;/);
+    match = statement.match(/^(\w+)\s*=\s*new\s+(\w+)\s*(?:\(\s*\))?\s*;/);
     if (match) {
       resetChangedFlags(variables);
       const address = `obj@${objectCounter++}`;
@@ -219,8 +238,34 @@ export function traceCode(language, code) {
       return;
     }
 
+    match = statement.match(/^(\w+)\s+(\w+)\s*=\s*new\s+(\w+)\s*\(\s*\)\s*;/);
+    if (language === 'java' && match) {
+      resetChangedFlags(variables);
+      const declaredType = match[1];
+      const variableName = match[2];
+      const instantiatedType = match[3];
+      const address = `obj@${objectCounter++}`;
+
+      variables.push({
+        name: variableName,
+        type: declaredType,
+        value: address,
+        address: allocator.allocateStack(`${declaredType}*`),
+        reference: address,
+        changed: true,
+      });
+      heap.push({
+        address,
+        type: instantiatedType,
+        fields: {},
+      });
+      pushStep(lineIndex, 'object_alloc', `Create a new ${instantiatedType} object`);
+      return;
+    }
+
     match = statement.match(/^(\w+)\.(\w+)\s*=\s*(?:"([^"]*)"|(-?\d+))\s*;/);
     if (match) {
+      resetChangedFlags(variables);
       const owner = findVariable(variables, match[1]);
       const heapItem = heap.find((item) => item.address === owner?.reference);
 

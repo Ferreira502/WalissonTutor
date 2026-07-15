@@ -84,7 +84,7 @@ function buildNarrative(previousStep: Step | null, currentStep: Step, diff: Omit
   });
 
   diff.freedHeapAddresses.forEach((address) => {
-    messages.push(`A alocacao ${address} foi marcada como liberada.`);
+    messages.push(`A alocação ${address} foi marcada como liberada.`);
   });
 
   diff.changedHeapAddresses.forEach((address) => {
@@ -96,11 +96,11 @@ function buildNarrative(previousStep: Step | null, currentStep: Step, diff: Omit
   });
 
   if (diff.referenceEdges.length > 0) {
-    messages.push('Uma referencia foi animada para mostrar o destino do ponteiro.');
+    messages.push('Uma referência foi animada para mostrar o destino do ponteiro.');
   }
 
   if (diff.stdoutDelta) {
-    messages.push(`A saida padrao recebeu "${diff.stdoutDelta.trim()}".`);
+    messages.push(`A saída padrão recebeu "${diff.stdoutDelta.trim()}".`);
   }
 
   if (!messages.length) {
