@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import Editor, { type OnMount } from '@monaco-editor/react';
-import type { editor as MonacoEditor, Range } from 'monaco-editor';
+import type { editor as EditorMonaco, Range } from 'monaco-editor';
 import {
   AlertCircle,
   Box,
@@ -17,7 +17,6 @@ import {
   Sun,
   Terminal,
   WandSparkles,
-  ZoomIn,
 } from 'lucide-react';
 import { animated, useSpring, useSprings, useTransition } from '@react-spring/web';
 import {
@@ -31,79 +30,79 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useExecutionTimeline } from './hooks/useExecutionTimeline';
-import { samples } from './samples';
-import type { HeapItem, Language, PlaybackSpeed, StackFrame, Step, Trace, Variable } from './types';
-import { buildMemoryGraph, buildStepDiff } from './visualization';
+import { useLinhaDoTempoExecucao } from './hooks/useExecutionTimeline';
+import { exemplos } from './samples';
+import type { DiferencaPasso, ItemHeap, Linguagem, Passo, QuadroPilha, Rastreamento, Variavel, VelocidadeReproducao } from './types';
+import { construirDiferencaPasso, construirGrafoMemoria } from './visualization';
 import './styles.css';
 
-const languageLabels: Record<Language, string> = {
+const rotulosLinguagem: Record<Linguagem, string> = {
   c: 'C',
   cpp: 'C++',
   java: 'Java',
 };
 
-const statusLabels = {
+const rotulosStatus = {
   idle: 'Nao iniciado',
   running: 'Executando',
   done: 'Concluido',
   error: 'Erro',
 } as const;
 
-type StepAnalysis = ReturnType<typeof buildStepDiff>;
+type AnalisePasso = ReturnType<typeof construirDiferencaPasso>;
 
-type StackFrameNodeData = {
-  frame: StackFrame;
-  index: number;
-  diff: StepAnalysis;
-  previousFrame: StackFrame | null;
-  animationKey: number;
+type DadosNoQuadroPilha = {
+  quadro: QuadroPilha;
+  indice: number;
+  diferenca: AnalisePasso;
+  quadroAnterior: QuadroPilha | null;
+  chaveAnimacao: number;
 };
 
-type HeapBlockNodeData = {
-  item: HeapItem;
-  language: Language;
-  diff: StepAnalysis;
-  previousItem: HeapItem | null;
-  animationKey: number;
+type DadosNoBlocoHeap = {
+  item: ItemHeap;
+  linguagem: Linguagem;
+  diferenca: AnalisePasso;
+  itemAnterior: ItemHeap | null;
+  chaveAnimacao: number;
 };
 
-function CodeVisualizerApp() {
-  const [selectedLanguage, setSelectedLanguage] = useState<Language>('cpp');
-  const [sourceCode, setSourceCode] = useState(samples.cpp);
-  const [trace, setTrace] = useState<Trace | null>(null);
-  const [executionStatus, setExecutionStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
-  const [executionError, setExecutionError] = useState('');
-  const [lineTooltipVisible, setLineTooltipVisible] = useState(false);
-  const [lightModeEnabled, setLightModeEnabled] = useState(false);
+function AplicacaoVisualizadorCodigo() {
+  const [linguagemSelecionada, definirLinguagemSelecionada] = useState<Linguagem>('cpp');
+  const [codigoFonte, definirCodigoFonte] = useState(exemplos.cpp);
+  const [rastreamento, definirRastreamento] = useState<Rastreamento | null>(null);
+  const [statusExecucao, definirStatusExecucao] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [erroExecucao, definirErroExecucao] = useState('');
+  const [tooltipLinhaVisivel, definirTooltipLinhaVisivel] = useState(false);
+  const [modoClaroAtivo, definirModoClaroAtivo] = useState(false);
 
-  const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
+  const editorRef = useRef<EditorMonaco.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<{ Range: typeof Range } | null>(null);
-  const lineDecorationIdsRef = useRef<string[]>([]);
-  const tooltipTimerRef = useRef<number | null>(null);
+  const idsDecoracaoLinhaRef = useRef<string[]>([]);
+  const temporizadorTooltipRef = useRef<number | null>(null);
 
-  const timeline = useExecutionTimeline(trace);
-  const currentStep = trace?.steps[timeline.stepIndex] ?? null;
-  const previousStep = trace?.steps[timeline.stepIndex - 1] ?? null;
+  const linhaDoTempo = useLinhaDoTempoExecucao(rastreamento);
+  const passoAtual = rastreamento?.steps[linhaDoTempo.indicePasso] ?? null;
+  const passoAnterior = rastreamento?.steps[linhaDoTempo.indicePasso - 1] ?? null;
 
-  const currentDiff = useMemo(() => {
-    if (!currentStep) {
+  const diferencaAtual = useMemo(() => {
+    if (!passoAtual) {
       return null;
     }
 
-    return buildStepDiff(previousStep, currentStep);
-  }, [currentStep, previousStep]);
+    return construirDiferencaPasso(passoAnterior, passoAtual);
+  }, [passoAnterior, passoAtual]);
 
   useEffect(() => {
-    if (!currentStep || !editorRef.current || !monacoRef.current) {
+    if (!passoAtual || !editorRef.current || !monacoRef.current) {
       return;
     }
 
-    const range = new monacoRef.current.Range(currentStep.line, 1, currentStep.line, 1);
+    const faixaLinha = new monacoRef.current.Range(passoAtual.line, 1, passoAtual.line, 1);
 
-    lineDecorationIdsRef.current = editorRef.current.deltaDecorations(lineDecorationIdsRef.current, [
+    idsDecoracaoLinhaRef.current = editorRef.current.deltaDecorations(idsDecoracaoLinhaRef.current, [
       {
-        range,
+        range: faixaLinha,
         options: {
           isWholeLine: true,
           className: 'executingLine',
@@ -112,70 +111,71 @@ function CodeVisualizerApp() {
       },
     ]);
 
-    editorRef.current.revealLineInCenter(currentStep.line);
-    setLineTooltipVisible(true);
+    editorRef.current.revealLineInCenter(passoAtual.line);
+    definirTooltipLinhaVisivel(true);
 
-    if (tooltipTimerRef.current) {
-      window.clearTimeout(tooltipTimerRef.current);
+    if (temporizadorTooltipRef.current) {
+      window.clearTimeout(temporizadorTooltipRef.current);
     }
 
-    tooltipTimerRef.current = window.setTimeout(() => {
-      setLineTooltipVisible(false);
-    }, 1000 / timeline.speed);
-  }, [currentStep, timeline.speed]);
+    temporizadorTooltipRef.current = window.setTimeout(() => {
+      definirTooltipLinhaVisivel(false);
+    }, 1000 / linhaDoTempo.velocidade);
+  }, [linhaDoTempo.velocidade, passoAtual]);
 
-  const handleEditorMount: OnMount = (editor, monaco) => {
+  const aoMontarEditor: OnMount = (editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = { Range: monaco.Range };
   };
 
-  async function runTrace() {
-    setExecutionStatus('running');
-    setExecutionError('');
-    timeline.setPlaying(false);
+  async function executarRastreamento() {
+    definirStatusExecucao('running');
+    definirErroExecucao('');
+    linhaDoTempo.definirReproduzindo(false);
 
     try {
-      const response = await fetch('/api/run', {
+      const resposta = await fetch('/api/run', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          language: selectedLanguage,
-          code: sourceCode,
+          language: linguagemSelecionada,
+          code: codigoFonte,
         }),
       });
 
-      const result = await response.json();
+      const resultado = await resposta.json();
 
-      if (!response.ok) {
-        throw new Error(result.error);
+      if (!resposta.ok) {
+        throw new Error(resultado.error);
       }
 
-      setTrace(result);
-      timeline.setStepIndex(0);
-      setExecutionStatus('done');
-    } catch (error) {
-      setExecutionStatus('error');
-      setExecutionError(error instanceof Error ? error.message : 'Falha na execucao');
+      definirRastreamento(resultado);
+      linhaDoTempo.definirIndicePasso(0);
+      definirStatusExecucao('done');
+    } catch (erro) {
+      definirStatusExecucao('error');
+      definirErroExecucao(erro instanceof Error ? erro.message : 'Falha na execucao');
     }
   }
 
-  function changeLanguage(language: Language) {
-    setSelectedLanguage(language);
-    setSourceCode(samples[language]);
-    setTrace(null);
-    timeline.reset();
-    setExecutionStatus('idle');
-    setExecutionError('');
+  function alterarLinguagem(linguagem: Linguagem) {
+    definirLinguagemSelecionada(linguagem);
+    definirCodigoFonte(exemplos[linguagem]);
+    definirRastreamento(null);
+    linhaDoTempo.reiniciar();
+    definirStatusExecucao('idle');
+    definirErroExecucao('');
   }
 
-  const playbackSpeeds: PlaybackSpeed[] = [0.5, 1, 2, 4];
-  const currentFileName = selectedLanguage === 'java' ? 'Main.java' : selectedLanguage === 'cpp' ? 'main.cpp' : 'main.c';
-  const currentLineLabel = currentDiff ? currentDiff.currentLineLabel : 'Aguardando execucao';
+  const velocidadesDisponiveis: VelocidadeReproducao[] = [0.5, 1, 2, 4];
+  const nomeArquivoAtual =
+    linguagemSelecionada === 'java' ? 'Main.java' : linguagemSelecionada === 'cpp' ? 'main.cpp' : 'main.c';
+  const rotuloLinhaAtual = diferencaAtual ? diferencaAtual.currentLineLabel : 'Aguardando execucao';
 
   return (
-    <div className={`app ${lightModeEnabled ? 'lightTheme' : ''}`}>
+    <div className={`app ${modoClaroAtivo ? 'lightTheme' : ''}`}>
       <header className="topbar">
         <div className="brandBlock">
           <div className="brand brandMinimal">
@@ -185,7 +185,9 @@ function CodeVisualizerApp() {
         </div>
 
         <nav className="topnav" aria-label="Navegacao principal">
-          <a href="#editor" className="active">Codigo</a>
+          <a href="#editor" className="active">
+            Codigo
+          </a>
           <a href="#memoria">Visualizacao</a>
           <a href="#controle">Passos</a>
         </nav>
@@ -193,11 +195,11 @@ function CodeVisualizerApp() {
         <button
           type="button"
           className="themeToggle"
-          aria-label={lightModeEnabled ? 'Ativar modo escuro' : 'Ativar modo claro'}
-          title={lightModeEnabled ? 'Modo escuro' : 'Modo claro'}
-          onClick={() => setLightModeEnabled((enabled) => !enabled)}
+          aria-label={modoClaroAtivo ? 'Ativar modo escuro' : 'Ativar modo claro'}
+          title={modoClaroAtivo ? 'Modo escuro' : 'Modo claro'}
+          onClick={() => definirModoClaroAtivo((valorAtual) => !valorAtual)}
         >
-          {lightModeEnabled ? <Sun /> : <Moon />}
+          {modoClaroAtivo ? <Sun /> : <Moon />}
         </button>
       </header>
 
@@ -210,17 +212,17 @@ function CodeVisualizerApp() {
               <div className="sourceStatusList">
                 <div className="sourceStatusCard">
                   <span>Linguagem</span>
-                  <strong>{languageLabels[selectedLanguage]}</strong>
+                  <strong>{rotulosLinguagem[linguagemSelecionada]}</strong>
                 </div>
 
                 <div className="sourceStatusCard">
                   <span>Status</span>
-                  <strong>{statusLabels[executionStatus]}</strong>
+                  <strong>{rotulosStatus[statusExecucao]}</strong>
                 </div>
 
                 <div className="sourceStatusCard">
                   <span>Passos</span>
-                  <strong>{trace ? `${timeline.stepIndex + 1}/${trace.steps.length}` : '0/0'}</strong>
+                  <strong>{rastreamento ? `${linhaDoTempo.indicePasso + 1}/${rastreamento.steps.length}` : '0/0'}</strong>
                 </div>
               </div>
             </aside>
@@ -228,39 +230,39 @@ function CodeVisualizerApp() {
             <div className="sourceContent">
               <div className="toolbar">
                 <nav aria-label="Escolha de linguagem">
-                  {(['c', 'cpp', 'java'] as Language[]).map((language) => (
+                  {(['c', 'cpp', 'java'] as Linguagem[]).map((linguagem) => (
                     <button
-                      key={language}
+                      key={linguagem}
                       type="button"
-                      className={language === selectedLanguage ? 'active' : ''}
-                      aria-pressed={language === selectedLanguage}
-                      onClick={() => changeLanguage(language)}
+                      className={linguagem === linguagemSelecionada ? 'active' : ''}
+                      aria-pressed={linguagem === linguagemSelecionada}
+                      onClick={() => alterarLinguagem(linguagem)}
                     >
-                      {languageLabels[language]}
+                      {rotulosLinguagem[linguagem]}
                     </button>
                   ))}
                 </nav>
 
-                <code>{currentFileName}</code>
+                <code>{nomeArquivoAtual}</code>
 
-                <button className="restore" type="button" onClick={() => setSourceCode(samples[selectedLanguage])}>
+                <button className="restore" type="button" onClick={() => definirCodigoFonte(exemplos[linguagemSelecionada])}>
                   <RotateCcw />
                   Restaurar exemplo
                 </button>
               </div>
 
               <div className="editorWrap">
-                <div className={`lineTooltip ${lineTooltipVisible ? 'visible' : ''}`}>
-                  {currentStep ? `Executando: ${currentDiff?.currentLineLabel}` : 'Pronto para executar'}
+                <div className={`lineTooltip ${tooltipLinhaVisivel ? 'visible' : ''}`}>
+                  {passoAtual ? `Executando: ${diferencaAtual?.currentLineLabel}` : 'Pronto para executar'}
                 </div>
 
                 <div className="editor">
                   <Editor
-                    language={selectedLanguage === 'cpp' ? 'cpp' : selectedLanguage}
-                    value={sourceCode}
-                    onMount={handleEditorMount}
-                    onChange={(value) => setSourceCode(value ?? '')}
-                    theme={lightModeEnabled ? 'vs' : 'vs-dark'}
+                    language={linguagemSelecionada === 'cpp' ? 'cpp' : linguagemSelecionada}
+                    value={codigoFonte}
+                    onMount={aoMontarEditor}
+                    onChange={(valor) => definirCodigoFonte(valor ?? '')}
+                    theme={modoClaroAtivo ? 'vs' : 'vs-dark'}
                     options={{
                       fontSize: 14,
                       fontFamily: 'JetBrains Mono',
@@ -282,16 +284,16 @@ function CodeVisualizerApp() {
           <div className="visualHead">
             <div>
               <small>EXECUCAO</small>
-              <h2>{currentStep ? currentStep.explanation : 'Pronto para rastrear'}</h2>
+              <h2>{passoAtual ? passoAtual.explanation : 'Pronto para rastrear'}</h2>
             </div>
 
-            <span className={`badge ${executionStatus}`}>
-              {executionStatus === 'done' ? <CheckCircle2 /> : executionStatus === 'error' ? <AlertCircle /> : <i />}
-              {statusLabels[executionStatus]}
+            <span className={`badge ${statusExecucao}`}>
+              {statusExecucao === 'done' ? <CheckCircle2 /> : statusExecucao === 'error' ? <AlertCircle /> : <i />}
+              {rotulosStatus[statusExecucao]}
             </span>
           </div>
 
-          {!currentStep && !executionError && (
+          {!passoAtual && !erroExecucao && (
             <div className="empty">
               <span>
                 <Play />
@@ -302,26 +304,26 @@ function CodeVisualizerApp() {
             </div>
           )}
 
-          {executionError && (
+          {erroExecucao && (
             <div className="error">
               <AlertCircle />
 
               <div>
                 <b>Execucao interrompida</b>
-                <pre>{executionError}</pre>
+                <pre>{erroExecucao}</pre>
               </div>
             </div>
           )}
 
-          {currentStep && currentDiff && (
-            <MemoryDiagram
-              step={currentStep}
-              previousStep={previousStep}
-              language={selectedLanguage}
-              diff={currentDiff}
-              animationKey={timeline.animationKey}
-              isTransitioning={timeline.isTransitioning}
-              speed={timeline.speed}
+          {passoAtual && diferencaAtual && (
+            <DiagramaMemoria
+              passo={passoAtual}
+              passoAnterior={passoAnterior}
+              linguagem={linguagemSelecionada}
+              diferenca={diferencaAtual}
+              chaveAnimacao={linhaDoTempo.chaveAnimacao}
+              emTransicao={linhaDoTempo.emTransicao}
+              velocidade={linhaDoTempo.velocidade}
             />
           )}
         </section>
@@ -329,18 +331,18 @@ function CodeVisualizerApp() {
 
       <footer id="controle">
         <div className="controls">
-          <span className={`footerStatus ${executionStatus}`}>{statusLabels[executionStatus]}</span>
+          <span className={`footerStatus ${statusExecucao}`}>{rotulosStatus[statusExecucao]}</span>
 
-          <button type="button" onClick={runTrace} disabled={executionStatus === 'running'} className="runAction">
-            {executionStatus === 'running' ? <i className="spinner" /> : <Play />}
+          <button type="button" onClick={executarRastreamento} disabled={statusExecucao === 'running'} className="runAction">
+            {statusExecucao === 'running' ? <i className="spinner" /> : <Play />}
           </button>
 
           <button
             type="button"
             title="Reiniciar"
             aria-label="Reiniciar animacao"
-            onClick={timeline.reset}
-            disabled={!trace || timeline.stepIndex === 0}
+            onClick={linhaDoTempo.reiniciar}
+            disabled={!rastreamento || linhaDoTempo.indicePasso === 0}
           >
             <RotateCcw />
           </button>
@@ -349,29 +351,29 @@ function CodeVisualizerApp() {
             type="button"
             title="Passo anterior"
             aria-label="Passo anterior"
-            onClick={timeline.previous}
-            disabled={!trace || timeline.stepIndex === 0}
+            onClick={linhaDoTempo.voltar}
+            disabled={!rastreamento || linhaDoTempo.indicePasso === 0}
           >
             <ChevronLeft />
           </button>
 
           <button
             type="button"
-            title={timeline.playing ? 'Pausar' : 'Reproduzir'}
-            aria-label={timeline.playing ? 'Pausar animacao' : 'Reproduzir animacao'}
+            title={linhaDoTempo.reproduzindo ? 'Pausar' : 'Reproduzir'}
+            aria-label={linhaDoTempo.reproduzindo ? 'Pausar animacao' : 'Reproduzir animacao'}
             className="play"
-            onClick={() => timeline.setPlaying((isPlaying) => !isPlaying)}
-            disabled={!trace}
+            onClick={() => linhaDoTempo.definirReproduzindo((valorAtual) => !valorAtual)}
+            disabled={!rastreamento}
           >
-            {timeline.playing ? <Pause /> : <Play />}
+            {linhaDoTempo.reproduzindo ? <Pause /> : <Play />}
           </button>
 
           <button
             type="button"
             title="Proximo passo"
             aria-label="Proximo passo"
-            onClick={timeline.next}
-            disabled={!trace || timeline.stepIndex === timeline.maxIndex}
+            onClick={linhaDoTempo.avancar}
+            disabled={!rastreamento || linhaDoTempo.indicePasso === linhaDoTempo.indiceMaximo}
           >
             <ChevronRight />
           </button>
@@ -379,35 +381,35 @@ function CodeVisualizerApp() {
 
         <div className="timeline">
           <div>
-            <b>{trace ? `Passo ${timeline.stepIndex + 1} de ${trace.steps.length}` : 'Nenhum rastreamento carregado'}</b>
-            <span>{currentLineLabel}</span>
+            <b>{rastreamento ? `Passo ${linhaDoTempo.indicePasso + 1} de ${rastreamento.steps.length}` : 'Nenhum rastreamento carregado'}</b>
+            <span>{rotuloLinhaAtual}</span>
           </div>
 
           <input
             type="range"
             min="0"
-            max={timeline.maxIndex}
-            value={timeline.stepIndex}
+            max={linhaDoTempo.indiceMaximo}
+            value={linhaDoTempo.indicePasso}
             aria-label="Linha do tempo da execucao"
-            disabled={!trace}
-            onChange={(event) => timeline.setStepIndex(Number(event.target.value))}
-            style={{ '--p': `${timeline.timelineProgress * 100}%` } as React.CSSProperties}
+            disabled={!rastreamento}
+            onChange={(evento) => linhaDoTempo.definirIndicePasso(Number(evento.target.value))}
+            style={{ '--p': `${linhaDoTempo.progressoLinhaDoTempo * 100}%` } as React.CSSProperties}
           />
         </div>
 
         <label className="speedGroup">
-          <span>{currentFileName}</span>
+          <span>{nomeArquivoAtual}</span>
 
           <div className="speedButtons" role="radiogroup" aria-label="Velocidade da animacao">
-            {playbackSpeeds.map((speedOption) => (
+            {velocidadesDisponiveis.map((velocidade) => (
               <button
-                key={speedOption}
+                key={velocidade}
                 type="button"
-                className={timeline.speed === speedOption ? 'active' : ''}
-                aria-pressed={timeline.speed === speedOption}
-                onClick={() => timeline.setSpeed(speedOption)}
+                className={linhaDoTempo.velocidade === velocidade ? 'active' : ''}
+                aria-pressed={linhaDoTempo.velocidade === velocidade}
+                onClick={() => linhaDoTempo.definirVelocidade(velocidade)}
               >
-                {speedOption}x
+                {velocidade}x
               </button>
             ))}
           </div>
@@ -417,68 +419,68 @@ function CodeVisualizerApp() {
   );
 }
 
-function MemoryDiagram({
-  step,
-  previousStep,
-  language,
-  diff,
-  animationKey,
-  isTransitioning,
-  speed,
+function DiagramaMemoria({
+  passo,
+  passoAnterior,
+  linguagem,
+  diferenca,
+  chaveAnimacao,
+  emTransicao,
+  velocidade,
 }: {
-  step: Step;
-  previousStep: Step | null;
-  language: Language;
-  diff: StepAnalysis;
-  animationKey: number;
-  isTransitioning: boolean;
-  speed: PlaybackSpeed;
+  passo: Passo;
+  passoAnterior: Passo | null;
+  linguagem: Linguagem;
+  diferenca: AnalisePasso;
+  chaveAnimacao: number;
+  emTransicao: boolean;
+  velocidade: VelocidadeReproducao;
 }) {
-  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+  const [instanciaFluxo, definirInstanciaFluxo] = useState<ReactFlowInstance | null>(null);
 
-  const nodeTypes = useMemo(
+  const tiposNos = useMemo(
     () => ({
-      stackFrame: StackFrameNode,
-      heapBlock: HeapBlockNode,
+      stackFrame: NoQuadroPilha,
+      heapBlock: NoBlocoHeap,
     }),
     [],
   );
 
-  const memoryGraph = useMemo(
+  const grafoMemoria = useMemo(
     () =>
-      buildMemoryGraph({
-        step,
-        previousStep,
-        language,
-        diff,
-        animationKey,
+      construirGrafoMemoria({
+        passo,
+        passoAnterior,
+        linguagem,
+        diferenca,
+        chaveAnimacao,
       }),
-    [animationKey, diff, language, previousStep, step],
+    [chaveAnimacao, diferenca, linguagem, passo, passoAnterior],
   );
 
   useEffect(() => {
-    if (!reactFlowInstance) {
+    if (!instanciaFluxo) {
       return;
     }
 
-    const focusedNodes = memoryGraph.nodes.filter((node) => diff.focusNodeIds.includes(node.id));
+    const nosEmFoco = grafoMemoria.nodes.filter((no) => diferenca.focusNodeIds.includes(no.id));
 
-    if (focusedNodes.length > 0) {
-      reactFlowInstance.fitView({
-        nodes: focusedNodes,
-        duration: Math.max(280, 700 / speed),
+    if (nosEmFoco.length > 0) {
+      instanciaFluxo.fitView({
+        nodes: nosEmFoco,
+        duration: Math.max(280, 700 / velocidade),
         padding: 0.35,
       });
       return;
     }
 
-    reactFlowInstance.fitView({
-      duration: Math.max(280, 700 / speed),
+    instanciaFluxo.fitView({
+      duration: Math.max(280, 700 / velocidade),
       padding: 0.2,
     });
-  }, [diff.focusNodeIds, memoryGraph.nodes, reactFlowInstance, speed]);
+  }, [diferenca.focusNodeIds, grafoMemoria.nodes, instanciaFluxo, velocidade]);
 
-  const bannerAnimation = useSpring({
+  const animacaoBanner = useSpring({
     from: { opacity: 0, y: 10 },
     to: { opacity: 1, y: 0 },
     reset: true,
@@ -486,46 +488,46 @@ function MemoryDiagram({
     config: { tension: 220, friction: 24 },
   });
 
-  const tooltipTransition = useTransition([`${animationKey}-${step.line}`], {
-    from: { opacity: 0, transform: 'translateY(8px)' },
-    enter: { opacity: 1, transform: 'translateY(0px)' },
-    leave: { opacity: 0, transform: 'translateY(-8px)' },
-    config: { tension: 250, friction: 22 },
-  });
-
   return (
     <div className="memoryView">
-      <animated.div className="focusBanner" style={bannerAnimation}>
+      <animated.div className="focusBanner" style={animacaoBanner}>
         <div className="focusBannerLine">
           <WandSparkles />
-          <b>{diff.currentLineLabel}</b>
-          <span>{isTransitioning ? 'Atualizando alteracoes...' : 'Estado estabilizado'}</span>
+          <b>{diferenca.currentLineLabel}</b>
+          <span>{emTransicao ? 'Atualizando' : 'Estavel'}</span>
         </div>
 
         <div className="focusBannerTargets">
-          {diff.narrative.slice(0, 3).map((message) => (
-            <span key={message}>{message}</span>
+          {diferenca.narrative.slice(0, 2).map((mensagem) => (
+            <span key={mensagem}>{mensagem}</span>
           ))}
         </div>
       </animated.div>
 
       <div className="memorySummary">
-        <Title icon={<Layers3 />} title="Mapa de memoria" sub="Leitura simples da stack, heap e referencias" />
+        <div className="memorySummaryMain">
+          <TituloSecao icon={<Layers3 />} title="Mapa de memoria" sub="Leitura simples da stack, heap e referencias" />
+
+          <div className="memoryInsight">
+            <b>{passo.explanation}</b>
+            <span>{diferenca.narrative[0]}</span>
+          </div>
+        </div>
 
         <div className="memorySummaryStats">
-          <span>{step.stack.length} frame(s)</span>
-          <span>{step.heap.length} bloco(s) na heap</span>
-          <span>{diff.referenceEdges.length} seta(s) destacada(s)</span>
-          <span>{diff.stdoutDelta ? 'stdout ativo' : 'stdout ocioso'}</span>
+          <span>{passo.stack.length} frame(s)</span>
+          <span>{passo.heap.length} bloco(s) na heap</span>
+          <span>{diferenca.referenceEdges.length} seta(s)</span>
+          <span>{diferenca.stdoutDelta ? 'stdout ativo' : 'stdout ocioso'}</span>
         </div>
       </div>
 
       <div className="memoryCanvas" aria-label="Diagrama interativo da memoria">
         <ReactFlowProvider>
           <ReactFlow
-            nodes={memoryGraph.nodes}
-            edges={memoryGraph.edges}
-            nodeTypes={nodeTypes}
+            nodes={grafoMemoria.nodes}
+            edges={grafoMemoria.edges}
+            nodeTypes={tiposNos}
             fitView
             fitViewOptions={{ padding: 0.2 }}
             minZoom={0.55}
@@ -535,58 +537,47 @@ function MemoryDiagram({
             elementsSelectable
             panOnDrag
             zoomOnDoubleClick={false}
-            onInit={setReactFlowInstance}
+            onInit={definirInstanciaFluxo}
             proOptions={{ hideAttribution: true }}
           >
             <Background gap={22} size={1} color="#1b2432" />
           </ReactFlow>
         </ReactFlowProvider>
-
-        {tooltipTransition((style) => (
-          <animated.div className="memoryTooltip" style={style}>
-            <ZoomIn />
-
-            <div>
-              <b>{step.explanation}</b>
-              <span>{diff.narrative[0]}</span>
-            </div>
-          </animated.div>
-        ))}
       </div>
 
       <div className="memoryMetaGrid">
         <section className="metaCard">
-          <Title icon={<Box />} title="Mudancas do passo" sub="Antes e depois do estado atual" />
+          <TituloSecao icon={<Box />} title="Mudancas do passo" sub="Antes e depois do estado atual" />
 
           <div className="metaList">
-            {diff.narrative.concat(memoryGraph.pluginMessages).slice(0, 5).map((message) => (
-              <div className="timelineMetaRow" key={message}>
+            {diferenca.narrative.concat(grafoMemoria.pluginMessages).slice(0, 5).map((mensagem) => (
+              <div className="timelineMetaRow" key={mensagem}>
                 <span />
-                <p>{message}</p>
+                <p>{mensagem}</p>
               </div>
             ))}
           </div>
         </section>
 
         <section className="metaCard">
-          <Title icon={<Terminal />} title="Saida padrao" sub="Texto gerado na execucao" />
-          <AnimatedStdout value={step.stdout} delta={diff.stdoutDelta} animationKey={animationKey} />
+          <TituloSecao icon={<Terminal />} title="Saida padrao" sub="Texto gerado na execucao" />
+          <SaidaPadraoAnimada value={passo.stdout} delta={diferenca.stdoutDelta} chaveAnimacao={chaveAnimacao} />
         </section>
       </div>
     </div>
   );
 }
 
-function StackFrameNode({ data }: NodeProps<Node<StackFrameNodeData>>) {
-  const frameAnimation = useSpring({
+function NoQuadroPilha({ data }: NodeProps<Node<DadosNoQuadroPilha>>) {
+  const animacaoQuadro = useSpring({
     from: { opacity: 0.72, scale: 0.98 },
     to: { opacity: 1, scale: 1 },
     reset: true,
     config: { tension: 230, friction: 20 },
   });
 
-  const variableTransitions = useTransition(data.frame.variables, {
-    keys: (variable) => `${data.frame.name}:${variable.name}:${variable.address ?? 'na'}`,
+  const transicoesVariaveis = useTransition(data.quadro.variables, {
+    keys: (variavel) => `${data.quadro.name}:${variavel.name}:${variavel.address ?? 'na'}`,
     from: { opacity: 0, y: 18, scale: 0.95 },
     enter: { opacity: 1, y: 0, scale: 1 },
     leave: { opacity: 0, y: -12, scale: 0.95 },
@@ -595,35 +586,35 @@ function StackFrameNode({ data }: NodeProps<Node<StackFrameNodeData>>) {
     config: { tension: 240, friction: 22 },
   });
 
-  const previousVariablesByKey = useMemo(() => {
-    const variableMap = new Map<string, Variable>();
+  const mapaVariaveisAnteriores = useMemo(() => {
+    const mapa = new Map<string, Variavel>();
 
-    data.previousFrame?.variables.forEach((variable) => {
-      variableMap.set(`${data.frame.name}:${variable.name}:${variable.address ?? 'na'}`, variable);
+    data.quadroAnterior?.variables.forEach((variavel) => {
+      mapa.set(`${data.quadro.name}:${variavel.name}:${variavel.address ?? 'na'}`, variavel);
     });
 
-    return variableMap;
-  }, [data.frame.name, data.previousFrame]);
+    return mapa;
+  }, [data.quadro.name, data.quadroAnterior]);
 
   return (
-    <animated.div className="diagramNode stackNode" style={frameAnimation}>
+    <animated.div className="diagramNode stackNode" style={animacaoQuadro}>
       <div className="diagramNodeHeader">
         <span className="chip">STACK</span>
-        <b>{data.frame.name}()</b>
-        <em>#{data.index + 1}</em>
+        <b>{data.quadro.name}()</b>
+        <em>#{data.indice + 1}</em>
       </div>
 
       <div className="diagramNodeBody">
-        {variableTransitions((style, variable) => {
-          const variableKey = `${data.frame.name}:${variable.name}:${variable.address ?? 'na'}`;
+        {transicoesVariaveis((estilo, variavel) => {
+          const chave = `${data.quadro.name}:${variavel.name}:${variavel.address ?? 'na'}`;
 
           return (
-            <animated.div style={style}>
-              <StackVariableRow
-                variable={variable}
-                previousVariable={previousVariablesByKey.get(variableKey) ?? null}
-                frameName={data.frame.name}
-                diff={data.diff}
+            <animated.div style={estilo}>
+              <LinhaVariavelPilha
+                variavel={variavel}
+                variavelAnterior={mapaVariaveisAnteriores.get(chave) ?? null}
+                nomeQuadro={data.quadro.name}
+                diferenca={data.diferenca}
               />
             </animated.div>
           );
@@ -633,42 +624,44 @@ function StackFrameNode({ data }: NodeProps<Node<StackFrameNodeData>>) {
   );
 }
 
-function StackVariableRow({
-  variable,
-  previousVariable,
-  frameName,
-  diff,
+function LinhaVariavelPilha({
+  variavel,
+  variavelAnterior,
+  nomeQuadro,
+  diferenca,
 }: {
-  variable: Variable;
-  previousVariable: Variable | null;
-  frameName: string;
-  diff: StepAnalysis;
+  variavel: Variavel;
+  variavelAnterior: Variavel | null;
+  nomeQuadro: string;
+  diferenca: AnalisePasso;
 }) {
-  const variableKey = `${frameName}:${variable.name}:${variable.address ?? 'na'}`;
-  const isNewVariable = diff.addedVariableKeys.includes(variableKey);
-  const isChangedVariable = diff.changedVariableKeys.includes(variableKey) || variable.changed;
-  const hasMeaningfulChange =
-    !previousVariable ||
-    previousVariable.value !== variable.value ||
-    previousVariable.reference !== variable.reference ||
-    previousVariable.type !== variable.type;
+  const chaveVariavelAtual = `${nomeQuadro}:${variavel.name}:${variavel.address ?? 'na'}`;
+  const ehVariavelNova = diferenca.addedVariableKeys.includes(chaveVariavelAtual);
+  const ehVariavelAlterada = diferenca.changedVariableKeys.includes(chaveVariavelAtual) || variavel.changed;
+  const houveMudancaRelevante =
+    !variavelAnterior ||
+    variavelAnterior.value !== variavel.value ||
+    variavelAnterior.reference !== variavel.reference ||
+    variavelAnterior.type !== variavel.type;
 
-  const variableAnimation = useSpring({
+  const animacaoVariavel = useSpring({
     from: {
-      boxShadow: isNewVariable ? '0 0 0 rgba(102, 221, 177, 0)' : '0 0 0 rgba(130, 103, 240, 0)',
-      scale: isNewVariable || isChangedVariable ? 0.96 : 1,
+      boxShadow: ehVariavelNova ? '0 0 0 rgba(102, 221, 177, 0)' : '0 0 0 rgba(130, 103, 240, 0)',
+      scale: ehVariavelNova || ehVariavelAlterada ? 0.96 : 1,
       background: 'rgba(8, 12, 17, 0.42)',
     },
-    to: async (next) => {
-      if (isNewVariable || isChangedVariable) {
-        await next({
+    to: async (proximo) => {
+      if (ehVariavelNova || ehVariavelAlterada) {
+        await proximo({
           scale: 1.02,
-          background: isNewVariable ? 'rgba(102, 221, 177, 0.16)' : 'rgba(130, 103, 240, 0.18)',
-          boxShadow: isNewVariable ? '0 0 22px rgba(102, 221, 177, 0.2)' : '0 0 22px rgba(130, 103, 240, 0.18)',
+          background: ehVariavelNova ? 'rgba(102, 221, 177, 0.16)' : 'rgba(130, 103, 240, 0.18)',
+          boxShadow: ehVariavelNova
+            ? '0 0 22px rgba(102, 221, 177, 0.2)'
+            : '0 0 22px rgba(130, 103, 240, 0.18)',
         });
       }
 
-      await next({
+      await proximo({
         scale: 1,
         background: 'rgba(8, 12, 17, 0.42)',
         boxShadow: '0 0 0 rgba(0, 0, 0, 0)',
@@ -679,53 +672,60 @@ function StackVariableRow({
   });
 
   return (
-    <animated.div className={`stackVarRow ${isChangedVariable ? 'changed' : ''}`} style={variableAnimation}>
-      {variable.address && <Handle type="target" id={`stack:${variable.address}`} position={Position.Left} className="memoryHandle" />}
+    <animated.div className={`stackVarRow ${ehVariavelAlterada ? 'changed' : ''}`} style={animacaoVariavel}>
+      {variavel.address && <Handle type="target" id={`stack:${variavel.address}`} position={Position.Left} className="memoryHandle" />}
 
-      {variable.reference && (
-        <Handle type="source" id={`ref:${variable.name}:${variable.reference}`} position={Position.Right} className="memoryHandle source" />
+      {variavel.reference && (
+        <Handle
+          type="source"
+          id={`ref:${variavel.name}:${variavel.reference}`}
+          position={Position.Right}
+          className="memoryHandle source"
+        />
       )}
 
       <div className="stackVarMeta">
-        <span>{variable.type}</span>
-        <b>{variable.name}</b>
+        <span>{variavel.type}</span>
+        <b>{variavel.name}</b>
 
-        {!previousVariable && <small className="valueDelta">nova variavel na stack</small>}
+        {!variavelAnterior && <small className="valueDelta">nova variavel na stack</small>}
 
-        {previousVariable && hasMeaningfulChange && (
+        {variavelAnterior && houveMudancaRelevante && (
           <small className="valueDelta">
-            antes: {String(previousVariable.value)} -&gt; agora: {String(variable.value)}
+            antes: {String(variavelAnterior.value)} -&gt; agora: {String(variavel.value)}
           </small>
         )}
       </div>
 
       <div className="stackVarValue">
-        <code>{String(variable.value)}</code>
-        {variable.address && <small>{variable.address}</small>}
+        <code>{String(variavel.value)}</code>
+        {variavel.address && <small>{variavel.address}</small>}
       </div>
     </animated.div>
   );
 }
 
-function HeapBlockNode({ data }: NodeProps<Node<HeapBlockNodeData>>) {
-  const isNewAllocation = data.diff.addedHeapAddresses.includes(data.item.address);
-  const isChangedAllocation = data.diff.changedHeapAddresses.includes(data.item.address);
-  const isFreedAllocation = data.diff.freedHeapAddresses.includes(data.item.address);
+function NoBlocoHeap({ data }: NodeProps<Node<DadosNoBlocoHeap>>) {
+  const ehAlocacaoNova = data.diferenca.addedHeapAddresses.includes(data.item.address);
+  const ehAlocacaoAlterada = data.diferenca.changedHeapAddresses.includes(data.item.address);
+  const ehAlocacaoLiberada = data.diferenca.freedHeapAddresses.includes(data.item.address);
 
-  const changedIndexes = new Set((data.item.values ?? []).flatMap((value, index) => (data.previousItem?.values?.[index] !== value ? [index] : [])));
+  const indicesAlterados = new Set(
+    (data.item.values ?? []).flatMap((valor, indice) => (data.itemAnterior?.values?.[indice] !== valor ? [indice] : [])),
+  );
 
-  const blockAnimation = useSpring({
+  const animacaoBloco = useSpring({
     from: {
-      opacity: isFreedAllocation ? 1 : 0.75,
-      scale: isNewAllocation ? 0.82 : 0.96,
+      opacity: ehAlocacaoLiberada ? 1 : 0.75,
+      scale: ehAlocacaoNova ? 0.82 : 0.96,
     },
-    to: async (next) => {
-      await next({
+    to: async (proximo) => {
+      await proximo({
         opacity: 1,
-        scale: isNewAllocation || isChangedAllocation ? 1.03 : 1,
+        scale: ehAlocacaoNova || ehAlocacaoAlterada ? 1.03 : 1,
       });
 
-      await next({
+      await proximo({
         opacity: data.item.freed ? 0.55 : 1,
         scale: 1,
       });
@@ -734,26 +734,26 @@ function HeapBlockNode({ data }: NodeProps<Node<HeapBlockNodeData>>) {
     config: { tension: 230, friction: 20 },
   });
 
-  const cellValues = data.item.values ?? [];
+  const valoresCelulas = data.item.values ?? [];
 
-  const [cellAnimations] = useSprings(
-    cellValues.length,
-    (index) => ({
+  const [animacoesCelulas] = useSprings(
+    valoresCelulas.length,
+    (indice) => ({
       from: { opacity: 0, y: 18, scale: 0.9 },
       to: { opacity: 1, y: 0, scale: 1 },
-      delay: 80 + index * 40,
+      delay: 80 + indice * 40,
       reset: true,
       config: { tension: 220, friction: 18 },
     }),
-    [cellValues.length, data.animationKey],
+    [valoresCelulas.length, data.chaveAnimacao],
   );
 
   return (
-    <animated.div className={`diagramNode heapNode ${data.item.freed ? 'freed' : ''}`} style={blockAnimation}>
+    <animated.div className={`diagramNode heapNode ${data.item.freed ? 'freed' : ''}`} style={animacaoBloco}>
       <Handle type="target" id={`heap:${data.item.address}`} position={Position.Left} className="memoryHandle" />
 
       <div className="diagramNodeHeader">
-        <span className="chip">{data.language === 'java' ? 'OBJ' : 'HEAP'}</span>
+        <span className="chip">{data.linguagem === 'java' ? 'OBJ' : 'HEAP'}</span>
         <b>{data.item.type}</b>
         <code>{data.item.address}</code>
       </div>
@@ -761,15 +761,15 @@ function HeapBlockNode({ data }: NodeProps<Node<HeapBlockNodeData>>) {
       <div className="diagramNodeBody">
         {data.item.values && (
           <div className="heapArray">
-            {data.item.values.map((value, index) => (
+            {data.item.values.map((valor, indice) => (
               <animated.div
-                key={`${data.item.address}-${index}`}
-                className={`heapArrayCell ${changedIndexes.has(index) ? 'flash' : ''}`}
-                style={cellAnimations[index]}
+                key={`${data.item.address}-${indice}`}
+                className={`heapArrayCell ${indicesAlterados.has(indice) ? 'flash' : ''}`}
+                style={animacoesCelulas[indice]}
               >
-                <small>{index}</small>
-                <strong>{String(value)}</strong>
-                {data.item.elementAddresses?.[index] && <code>{data.item.elementAddresses[index]}</code>}
+                <small>{indice}</small>
+                <strong>{String(valor)}</strong>
+                {data.item.elementAddresses?.[indice] && <code>{data.item.elementAddresses[indice]}</code>}
               </animated.div>
             ))}
           </div>
@@ -777,20 +777,20 @@ function HeapBlockNode({ data }: NodeProps<Node<HeapBlockNodeData>>) {
 
         {data.item.fields && (
           <div className="heapFields">
-            {Object.entries(data.item.fields).map(([fieldName, fieldValue]) => (
-              <div className="heapFieldRow" key={`${data.item.address}-${fieldName}`}>
-                <span>{fieldName}</span>
-                <b>{String(fieldValue)}</b>
+            {Object.entries(data.item.fields).map(([nomeCampo, valorCampo]) => (
+              <div className="heapFieldRow" key={`${data.item.address}-${nomeCampo}`}>
+                <span>{nomeCampo}</span>
+                <b>{String(valorCampo)}</b>
               </div>
             ))}
           </div>
         )}
 
-        {!data.previousItem && <small className="heapDelta">alocacao criada neste passo</small>}
+        {!data.itemAnterior && <small className="heapDelta">alocacao criada neste passo</small>}
 
-        {data.previousItem && (isChangedAllocation || isFreedAllocation) && (
+        {data.itemAnterior && (ehAlocacaoAlterada || ehAlocacaoLiberada) && (
           <small className="heapDelta">
-            antes: {serializeHeapPreview(data.previousItem)} | agora: {serializeHeapPreview(data.item)}
+            antes: {serializarResumoHeap(data.itemAnterior)} | agora: {serializarResumoHeap(data.item)}
           </small>
         )}
 
@@ -800,29 +800,29 @@ function HeapBlockNode({ data }: NodeProps<Node<HeapBlockNodeData>>) {
   );
 }
 
-function AnimatedStdout({
+function SaidaPadraoAnimada({
   value,
   delta,
-  animationKey,
+  chaveAnimacao,
 }: {
   value: string;
   delta: string;
-  animationKey: number;
+  chaveAnimacao: number;
 }) {
-  const stdoutAnimation = useSpring({
+  const animacaoSaida = useSpring({
     from: {
       opacity: 0.82,
       boxShadow: '0 0 0 rgba(101, 217, 184, 0)',
     },
-    to: async (next) => {
+    to: async (proximo) => {
       if (delta) {
-        await next({
+        await proximo({
           opacity: 1,
           boxShadow: '0 0 26px rgba(101, 217, 184, 0.16)',
         });
       }
 
-      await next({
+      await proximo({
         opacity: 1,
         boxShadow: '0 0 0 rgba(101, 217, 184, 0)',
       });
@@ -831,7 +831,7 @@ function AnimatedStdout({
     config: { tension: 220, friction: 22 },
   });
 
-  const deltaTransition = useTransition(delta ? [delta] : [], {
+  const transicaoDelta = useTransition(delta ? [delta] : [], {
     from: { opacity: 0, y: 12 },
     enter: { opacity: 1, y: 0 },
     leave: { opacity: 0, y: -10 },
@@ -839,12 +839,12 @@ function AnimatedStdout({
   });
 
   return (
-    <animated.div className="stdoutPanel" style={stdoutAnimation} key={animationKey}>
+    <animated.div className="stdoutPanel" style={animacaoSaida} key={chaveAnimacao}>
       <pre className="stdoutBox">{value || 'Aguardando saida...'}</pre>
 
       <div className="stdoutDeltaWrap">
-        {deltaTransition((style, item) => (
-          <animated.div className="stdoutDelta" style={style}>
+        {transicaoDelta((estilo, item) => (
+          <animated.div className="stdoutDelta" style={estilo}>
             novo output: {item.trim()}
           </animated.div>
         ))}
@@ -853,21 +853,21 @@ function AnimatedStdout({
   );
 }
 
-function serializeHeapPreview(heapItem: HeapItem) {
-  if (heapItem.values) {
-    return `[${heapItem.values.join(', ')}]`;
+function serializarResumoHeap(itemHeap: ItemHeap) {
+  if (itemHeap.values) {
+    return `[${itemHeap.values.join(', ')}]`;
   }
 
-  if (heapItem.fields) {
-    return Object.entries(heapItem.fields)
-      .map(([fieldName, fieldValue]) => `${fieldName}:${String(fieldValue)}`)
+  if (itemHeap.fields) {
+    return Object.entries(itemHeap.fields)
+      .map(([nomeCampo, valorCampo]) => `${nomeCampo}:${String(valorCampo)}`)
       .join(', ');
   }
 
-  return heapItem.type;
+  return itemHeap.type;
 }
 
-function Title({
+function TituloSecao({
   icon,
   title,
   sub,
@@ -888,10 +888,10 @@ function Title({
   );
 }
 
-const appContainer = document.getElementById('app');
+const containerAplicacao = document.getElementById('app');
 
-if (!appContainer) {
+if (!containerAplicacao) {
   throw new Error('Elemento de montagem #app nao encontrado.');
 }
 
-createRoot(appContainer).render(<CodeVisualizerApp />);
+createRoot(containerAplicacao).render(<AplicacaoVisualizadorCodigo />);

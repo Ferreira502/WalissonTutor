@@ -1,8 +1,8 @@
-export type Language = 'c' | 'cpp' | 'java';
+export type Linguagem = 'c' | 'cpp' | 'java';
 
-export type PlaybackSpeed = 0.5 | 1 | 2 | 4;
+export type VelocidadeReproducao = 0.5 | 1 | 2 | 4;
 
-export interface Variable {
+export interface Variavel {
   name: string;
   type: string;
   value: string | number;
@@ -11,7 +11,7 @@ export interface Variable {
   changed?: boolean;
 }
 
-export interface HeapItem {
+export interface ItemHeap {
   address: string;
   type: string;
   values?: Array<string | number>;
@@ -21,29 +21,29 @@ export interface HeapItem {
   freed?: boolean;
 }
 
-export interface StackFrame {
+export interface QuadroPilha {
   name: string;
-  variables: Variable[];
+  variables: Variavel[];
 }
 
-export interface Step {
+export interface Passo {
   line: number;
   event: string;
   explanation: string;
-  stack: StackFrame[];
-  heap: HeapItem[];
+  stack: QuadroPilha[];
+  heap: ItemHeap[];
   stdout: string;
 }
 
-export interface Trace {
+export interface Rastreamento {
   id: string;
-  language: Language;
-  steps: Step[];
+  language: Linguagem;
+  steps: Passo[];
   executionTimeMs: number;
   cached?: boolean;
 }
 
-export interface StepDiff {
+export interface DiferencaPasso {
   addedVariableKeys: string[];
   changedVariableKeys: string[];
   removedVariableKeys: string[];

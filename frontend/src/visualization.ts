@@ -1,334 +1,366 @@
 import { MarkerType, type Edge, type Node } from '@xyflow/react';
-import { defaultVisualizationPlugins, type MemoryGraphResult } from './plugins';
-import type { HeapItem, Language, StackFrame, Step, StepDiff, Variable } from './types';
+import { pluginsPadraoVisualizacao, type ResultadoGrafoMemoria } from './plugins';
+import type { DiferencaPasso, ItemHeap, Linguagem, Passo, QuadroPilha, Variavel } from './types';
 
-type StackNodeData = {
-  frame: StackFrame;
-  index: number;
-  diff: StepDiff;
-  previousFrame: StackFrame | null;
-  animationKey: number;
+type DadosNoPilha = {
+  quadro: QuadroPilha;
+  indice: number;
+  diferenca: DiferencaPasso;
+  quadroAnterior: QuadroPilha | null;
+  chaveAnimacao: number;
 };
 
-type HeapNodeData = {
-  item: HeapItem;
-  language: Language;
-  diff: StepDiff;
-  previousItem: HeapItem | null;
-  animationKey: number;
+type DadosNoHeap = {
+  item: ItemHeap;
+  linguagem: Linguagem;
+  diferenca: DiferencaPasso;
+  itemAnterior: ItemHeap | null;
+  chaveAnimacao: number;
 };
 
-type MemoryNodeData = StackNodeData | HeapNodeData;
+type DadosNoMemoria = DadosNoPilha | DadosNoHeap;
 
-function variableKey(frameName: string, variable: Variable) {
-  return `${frameName}:${variable.name}:${variable.address ?? 'na'}`;
+function chaveVariavel(nomeQuadro: string, variavel: Variavel) {
+  return `${nomeQuadro}:${variavel.name}:${variavel.address ?? 'na'}`;
 }
 
-function variableMap(step: Step | null) {
-  const map = new Map<string, Variable>();
+function mapaVariaveis(passo: Passo | null) {
+  const mapa = new Map<string, Variavel>();
 
-  step?.stack.forEach((frame) => {
-    frame.variables.forEach((variable) => {
-      map.set(variableKey(frame.name, variable), variable);
+  passo?.stack.forEach((quadro) => {
+    quadro.variables.forEach((variavel) => {
+      mapa.set(chaveVariavel(quadro.name, variavel), variavel);
     });
   });
 
-  return map;
+  return mapa;
 }
 
-function heapMap(step: Step | null) {
-  return new Map((step?.heap ?? []).map((item) => [item.address, item]));
+function mapaHeap(passo: Passo | null) {
+  return new Map((passo?.heap ?? []).map((item) => [item.address, item]));
 }
 
-function getNodeIdForAddress(step: Step, address: string) {
-  const stackIndex = step.stack.findIndex((frame) => frame.variables.some((variable) => variable.address === address));
-  if (stackIndex >= 0) {
-    return `stack-${stackIndex}`;
+function obterIdNoPorEndereco(passo: Passo, endereco: string) {
+  const indicePilha = passo.stack.findIndex((quadro) =>
+    quadro.variables.some((variavel) => variavel.address === endereco),
+  );
+
+  if (indicePilha >= 0) {
+    return `stack-${indicePilha}`;
   }
 
-  const heapIndex = step.heap.findIndex((item) => item.address === address);
-  if (heapIndex >= 0) {
-    return `heap-${heapIndex}`;
+  const indiceHeap = passo.heap.findIndex((item) => item.address === endereco);
+  if (indiceHeap >= 0) {
+    return `heap-${indiceHeap}`;
   }
 
   return null;
 }
 
-function buildNarrative(previousStep: Step | null, currentStep: Step, diff: Omit<StepDiff, 'narrative' | 'focusNodeIds' | 'currentLineLabel'>) {
-  const messages: string[] = [];
-  const previousVariables = variableMap(previousStep);
-  const currentVariables = variableMap(currentStep);
-  const previousHeap = heapMap(previousStep);
-  const currentHeap = heapMap(currentStep);
+function construirNarrativa(
+  passoAnterior: Passo | null,
+  passoAtual: Passo,
+  diferenca: Omit<DiferencaPasso, 'narrative' | 'focusNodeIds' | 'currentLineLabel'>,
+) {
+  const mensagens: string[] = [];
+  const variaveisAnteriores = mapaVariaveis(passoAnterior);
+  const variaveisAtuais = mapaVariaveis(passoAtual);
+  const heapAnterior = mapaHeap(passoAnterior);
+  const heapAtual = mapaHeap(passoAtual);
 
-  diff.addedVariableKeys.forEach((key) => {
-    const variable = currentVariables.get(key);
-    if (variable) {
-      messages.push(`${variable.name} surgiu na stack com valor ${String(variable.value)}.`);
+  diferenca.addedVariableKeys.forEach((chave) => {
+    const variavel = variaveisAtuais.get(chave);
+    if (variavel) {
+      mensagens.push(`${variavel.name} surgiu na stack com valor ${String(variavel.value)}.`);
     }
   });
 
-  diff.changedVariableKeys.forEach((key) => {
-    const previousVariable = previousVariables.get(key);
-    const currentVariable = currentVariables.get(key);
-    if (previousVariable && currentVariable) {
-      messages.push(`${currentVariable.name} mudou de ${String(previousVariable.value)} para ${String(currentVariable.value)}.`);
+  diferenca.changedVariableKeys.forEach((chave) => {
+    const variavelAnterior = variaveisAnteriores.get(chave);
+    const variavelAtual = variaveisAtuais.get(chave);
+
+    if (variavelAnterior && variavelAtual) {
+      mensagens.push(
+        `${variavelAtual.name} mudou de ${String(variavelAnterior.value)} para ${String(variavelAtual.value)}.`,
+      );
     }
   });
 
-  diff.addedHeapAddresses.forEach((address) => {
-    const item = currentHeap.get(address);
+  diferenca.addedHeapAddresses.forEach((endereco) => {
+    const item = heapAtual.get(endereco);
     if (item) {
-      messages.push(`${item.type} foi alocado na heap em ${address}.`);
+      mensagens.push(`${item.type} foi alocado na heap em ${endereco}.`);
     }
   });
 
-  diff.freedHeapAddresses.forEach((address) => {
-    messages.push(`A alocação ${address} foi marcada como liberada.`);
+  diferenca.freedHeapAddresses.forEach((endereco) => {
+    mensagens.push(`A alocacao ${endereco} foi marcada como liberada.`);
   });
 
-  diff.changedHeapAddresses.forEach((address) => {
-    const previousItem = previousHeap.get(address);
-    const currentItem = currentHeap.get(address);
-    if (previousItem && currentItem && JSON.stringify(previousItem.values) !== JSON.stringify(currentItem.values)) {
-      messages.push(`Os dados em ${address} foram atualizados.`);
+  diferenca.changedHeapAddresses.forEach((endereco) => {
+    const itemAnterior = heapAnterior.get(endereco);
+    const itemAtual = heapAtual.get(endereco);
+
+    if (itemAnterior && itemAtual && JSON.stringify(itemAnterior.values) !== JSON.stringify(itemAtual.values)) {
+      mensagens.push(`Os dados em ${endereco} foram atualizados.`);
     }
   });
 
-  if (diff.referenceEdges.length > 0) {
-    messages.push('Uma referência foi animada para mostrar o destino do ponteiro.');
+  if (diferenca.referenceEdges.length > 0) {
+    mensagens.push('Uma referencia foi animada para mostrar o destino do ponteiro.');
   }
 
-  if (diff.stdoutDelta) {
-    messages.push(`A saída padrão recebeu "${diff.stdoutDelta.trim()}".`);
+  if (diferenca.stdoutDelta) {
+    mensagens.push(`A saida padrao recebeu "${diferenca.stdoutDelta.trim()}".`);
   }
 
-  if (!messages.length) {
-    messages.push(currentStep.explanation);
+  if (!mensagens.length) {
+    mensagens.push(passoAtual.explanation);
   }
 
-  return messages;
+  return mensagens;
 }
 
-export function buildStepDiff(previousStep: Step | null, currentStep: Step): StepDiff {
-  const previousVariables = variableMap(previousStep);
-  const currentVariables = variableMap(currentStep);
-  const previousHeap = heapMap(previousStep);
-  const currentHeap = heapMap(currentStep);
+export function construirDiferencaPasso(passoAnterior: Passo | null, passoAtual: Passo): DiferencaPasso {
+  const variaveisAnteriores = mapaVariaveis(passoAnterior);
+  const variaveisAtuais = mapaVariaveis(passoAtual);
+  const heapAnterior = mapaHeap(passoAnterior);
 
-  const addedVariableKeys: string[] = [];
-  const changedVariableKeys: string[] = [];
-  const removedVariableKeys: string[] = [];
-  const addedHeapAddresses: string[] = [];
-  const changedHeapAddresses: string[] = [];
-  const freedHeapAddresses: string[] = [];
-  const referenceEdges: string[] = [];
-  const focusAddresses = new Set<string>();
+  const chavesVariaveisAdicionadas: string[] = [];
+  const chavesVariaveisAlteradas: string[] = [];
+  const chavesVariaveisRemovidas: string[] = [];
+  const enderecosHeapAdicionados: string[] = [];
+  const enderecosHeapAlterados: string[] = [];
+  const enderecosHeapLiberados: string[] = [];
+  const arestasReferencia: string[] = [];
+  const enderecosFoco = new Set<string>();
 
-  currentStep.stack.forEach((frame, frameIndex) => {
-    frame.variables.forEach((variable) => {
-      const key = variableKey(frame.name, variable);
-      const previousVariable = previousVariables.get(key);
+  passoAtual.stack.forEach((quadro, indiceQuadro) => {
+    quadro.variables.forEach((variavel) => {
+      const chave = chaveVariavel(quadro.name, variavel);
+      const variavelAnterior = variaveisAnteriores.get(chave);
 
-      if (!previousVariable) {
-        addedVariableKeys.push(key);
+      if (!variavelAnterior) {
+        chavesVariaveisAdicionadas.push(chave);
       } else if (
-        previousVariable.value !== variable.value ||
-        previousVariable.reference !== variable.reference ||
-        previousVariable.type !== variable.type
+        variavelAnterior.value !== variavel.value ||
+        variavelAnterior.reference !== variavel.reference ||
+        variavelAnterior.type !== variavel.type
       ) {
-        changedVariableKeys.push(key);
+        chavesVariaveisAlteradas.push(chave);
       }
 
-      if (variable.reference) {
-        const edgeId = `edge-${frameIndex}-${variable.name}-${variable.reference}`;
+      if (variavel.reference) {
+        const idAresta = `edge-${indiceQuadro}-${variavel.name}-${variavel.reference}`;
 
-        if (variable.changed || previousVariable?.reference !== variable.reference) {
-          referenceEdges.push(edgeId);
-          focusAddresses.add(variable.reference);
+        if (variavel.changed || variavelAnterior?.reference !== variavel.reference) {
+          arestasReferencia.push(idAresta);
+          enderecosFoco.add(variavel.reference);
         }
       }
 
-      if (variable.address && (variable.changed || !previousVariable)) {
-        focusAddresses.add(variable.address);
+      if (variavel.address && (variavel.changed || !variavelAnterior)) {
+        enderecosFoco.add(variavel.address);
       }
     });
   });
 
-  previousVariables.forEach((_variable, key) => {
-    if (!currentVariables.has(key)) {
-      removedVariableKeys.push(key);
+  variaveisAnteriores.forEach((_variavel, chave) => {
+    if (!variaveisAtuais.has(chave)) {
+      chavesVariaveisRemovidas.push(chave);
     }
   });
 
-  currentStep.heap.forEach((item) => {
-    const previousItem = previousHeap.get(item.address);
+  passoAtual.heap.forEach((item) => {
+    const itemAnterior = heapAnterior.get(item.address);
 
-    if (!previousItem) {
-      addedHeapAddresses.push(item.address);
-      focusAddresses.add(item.address);
+    if (!itemAnterior) {
+      enderecosHeapAdicionados.push(item.address);
+      enderecosFoco.add(item.address);
       return;
     }
 
-    if (JSON.stringify(previousItem.values) !== JSON.stringify(item.values) || JSON.stringify(previousItem.fields) !== JSON.stringify(item.fields)) {
-      changedHeapAddresses.push(item.address);
-      focusAddresses.add(item.address);
+    if (
+      JSON.stringify(itemAnterior.values) !== JSON.stringify(item.values) ||
+      JSON.stringify(itemAnterior.fields) !== JSON.stringify(item.fields)
+    ) {
+      enderecosHeapAlterados.push(item.address);
+      enderecosFoco.add(item.address);
     }
 
-    if (!previousItem.freed && item.freed) {
-      freedHeapAddresses.push(item.address);
-      focusAddresses.add(item.address);
+    if (!itemAnterior.freed && item.freed) {
+      enderecosHeapLiberados.push(item.address);
+      enderecosFoco.add(item.address);
     }
   });
 
-  const stdoutDelta = previousStep && currentStep.stdout.startsWith(previousStep.stdout)
-    ? currentStep.stdout.slice(previousStep.stdout.length)
-    : currentStep.stdout;
+  const deltaSaida =
+    passoAnterior && passoAtual.stdout.startsWith(passoAnterior.stdout)
+      ? passoAtual.stdout.slice(passoAnterior.stdout.length)
+      : passoAtual.stdout;
 
-  const partialDiff = {
-    addedVariableKeys,
-    changedVariableKeys,
-    removedVariableKeys,
-    addedHeapAddresses,
-    changedHeapAddresses,
-    freedHeapAddresses,
-    referenceEdges,
-    focusAddresses: [...focusAddresses],
-    stdoutDelta,
+  const diferencaParcial = {
+    addedVariableKeys: chavesVariaveisAdicionadas,
+    changedVariableKeys: chavesVariaveisAlteradas,
+    removedVariableKeys: chavesVariaveisRemovidas,
+    addedHeapAddresses: enderecosHeapAdicionados,
+    changedHeapAddresses: enderecosHeapAlterados,
+    freedHeapAddresses: enderecosHeapLiberados,
+    referenceEdges: arestasReferencia,
+    focusAddresses: [...enderecosFoco],
+    stdoutDelta: deltaSaida,
   };
 
   return {
-    ...partialDiff,
-    focusNodeIds: [...focusAddresses].map((address) => getNodeIdForAddress(currentStep, address)).filter(Boolean) as string[],
-    narrative: buildNarrative(previousStep, currentStep, partialDiff),
-    currentLineLabel: `Linha ${currentStep.line} · ${currentStep.event}`,
+    ...diferencaParcial,
+    focusNodeIds: [...enderecosFoco]
+      .map((endereco) => obterIdNoPorEndereco(passoAtual, endereco))
+      .filter(Boolean) as string[],
+    narrative: construirNarrativa(passoAnterior, passoAtual, diferencaParcial),
+    currentLineLabel: `Linha ${passoAtual.line} · ${passoAtual.event}`,
   };
 }
 
-function itemIsFreed(address: string, heap: HeapItem[]) {
-  return heap.some((item) => item.address === address && item.freed);
+function itemFoiLiberado(endereco: string, heap: ItemHeap[]) {
+  return heap.some((item) => item.address === endereco && item.freed);
 }
 
-export function buildMemoryGraph({
-  step,
-  previousStep,
-  language,
-  diff,
-  animationKey,
+export function construirGrafoMemoria({
+  passo,
+  passoAnterior,
+  linguagem,
+  diferenca,
+  chaveAnimacao,
 }: {
-  step: Step;
-  previousStep: Step | null;
-  language: Language;
-  diff: StepDiff;
-  animationKey: number;
+  passo: Passo;
+  passoAnterior: Passo | null;
+  linguagem: Linguagem;
+  diferenca: DiferencaPasso;
+  chaveAnimacao: number;
 }) {
-  const nodes: Node<MemoryNodeData>[] = [];
-  const edges: Edge[] = [];
-  const stackAddressMap = new Map<string, string>();
-  const heapAddressMap = new Map<string, string>();
-  const previousFrames = new Map((previousStep?.stack ?? []).map((frame) => [frame.name, frame]));
-  const previousHeap = new Map((previousStep?.heap ?? []).map((item) => [item.address, item]));
+  const nos: Node<DadosNoMemoria>[] = [];
+  const arestas: Edge[] = [];
+  const mapaEnderecosPilha = new Map<string, string>();
+  const mapaEnderecosHeap = new Map<string, string>();
+  const quadrosAnteriores = new Map((passoAnterior?.stack ?? []).map((quadro) => [quadro.name, quadro]));
+  const heapAnterior = new Map((passoAnterior?.heap ?? []).map((item) => [item.address, item]));
 
-  step.stack.forEach((frame, frameIndex) => {
-    const nodeId = `stack-${frameIndex}`;
-    const height = Math.max(170, 84 + frame.variables.length * 66);
+  passo.stack.forEach((quadro, indiceQuadro) => {
+    const idNo = `stack-${indiceQuadro}`;
+    const altura = Math.max(118, 62 + quadro.variables.length * 54);
 
-    nodes.push({
-      id: nodeId,
+    nos.push({
+      id: idNo,
       type: 'stackFrame',
-      position: { x: 30, y: 42 + frameIndex * (height + 28) },
+      position: { x: 28, y: 34 + indiceQuadro * (altura + 24) },
       draggable: false,
-      style: { width: 380, height },
+      style: { width: 336, height: altura, zIndex: 2 },
       data: {
-        frame,
-        index: frameIndex,
-        diff,
-        previousFrame: previousFrames.get(frame.name) ?? null,
-        animationKey,
+        quadro,
+        indice: indiceQuadro,
+        diferenca,
+        quadroAnterior: quadrosAnteriores.get(quadro.name) ?? null,
+        chaveAnimacao,
       },
     });
 
-    frame.variables.forEach((variable) => {
-      if (variable.address) {
-        stackAddressMap.set(variable.address, nodeId);
+    quadro.variables.forEach((variavel) => {
+      if (variavel.address) {
+        mapaEnderecosPilha.set(variavel.address, idNo);
       }
     });
   });
 
-  step.heap.forEach((item, heapIndex) => {
-    const nodeId = `heap-${heapIndex}`;
-    const bodySize = item.values ? Math.max(1, item.values.length) : Object.keys(item.fields ?? {}).length || 1;
-    const height = item.values ? 162 + Math.ceil(bodySize / 4) * 26 : 132 + bodySize * 28;
+  passo.heap.forEach((item, indiceHeap) => {
+    const idNo = `heap-${indiceHeap}`;
+    const tamanhoCorpo = item.values ? Math.max(1, item.values.length) : Object.keys(item.fields ?? {}).length || 1;
+    const altura = item.values ? 124 + Math.ceil(tamanhoCorpo / 4) * 24 : 102 + tamanhoCorpo * 24;
 
-    nodes.push({
-      id: nodeId,
+    nos.push({
+      id: idNo,
       type: 'heapBlock',
-      position: { x: 490, y: 42 + heapIndex * (height + 28) },
+      position: { x: 468, y: 34 + indiceHeap * (altura + 24) },
       draggable: false,
-      style: { width: item.values ? 340 : 310, height },
+      style: { width: item.values ? 298 : 280, height: altura, zIndex: 2 },
       data: {
         item,
-        language,
-        diff,
-        previousItem: previousHeap.get(item.address) ?? null,
-        animationKey,
+        linguagem,
+        diferenca,
+        itemAnterior: heapAnterior.get(item.address) ?? null,
+        chaveAnimacao,
       },
     });
 
-    heapAddressMap.set(item.address, nodeId);
+    mapaEnderecosHeap.set(item.address, idNo);
   });
 
-  step.stack.forEach((frame, frameIndex) => {
-    frame.variables.forEach((variable) => {
-      if (!variable.reference) {
+  passo.stack.forEach((quadro, indiceQuadro) => {
+    quadro.variables.forEach((variavel) => {
+      if (!variavel.reference) {
         return;
       }
 
-      const targetNodeId = stackAddressMap.get(variable.reference) ?? heapAddressMap.get(variable.reference);
-      if (!targetNodeId) {
+      const idNoDestino = mapaEnderecosPilha.get(variavel.reference) ?? mapaEnderecosHeap.get(variavel.reference);
+      if (!idNoDestino) {
         return;
       }
 
-      const edgeId = `edge-${frameIndex}-${variable.name}-${variable.reference}`;
-      const isHighlighted = diff.referenceEdges.includes(edgeId);
+      const idAresta = `edge-${indiceQuadro}-${variavel.name}-${variavel.reference}`;
+      const estaDestacada = diferenca.referenceEdges.includes(idAresta);
 
-      edges.push({
-        id: edgeId,
-        source: `stack-${frameIndex}`,
-        sourceHandle: `ref:${variable.name}:${variable.reference}`,
-        target: targetNodeId,
-        targetHandle: stackAddressMap.has(variable.reference) ? `stack:${variable.reference}` : `heap:${variable.reference}`,
-        type: 'smoothstep',
-        animated: isHighlighted,
-        label: isHighlighted ? `${variable.name} -> ${variable.reference}` : undefined,
-        labelStyle: {
-          fill: '#b4c6dd',
-          fontSize: 11,
-        },
+      arestas.push({
+        id: idAresta,
+        source: `stack-${indiceQuadro}`,
+        sourceHandle: `ref:${variavel.name}:${variavel.reference}`,
+        target: idNoDestino,
+        targetHandle: mapaEnderecosPilha.has(variavel.reference)
+          ? `stack:${variavel.reference}`
+          : `heap:${variavel.reference}`,
+        type: 'step',
+        animated: estaDestacada,
         markerEnd: { type: MarkerType.ArrowClosed, color: '#53c8ff' },
+        zIndex: 0,
         style: {
-          stroke: itemIsFreed(variable.reference, step.heap) ? '#ff8ca1' : isHighlighted ? '#6ee7ff' : '#53c8ff',
-          strokeWidth: isHighlighted ? 3 : 2,
-          strokeDasharray: isHighlighted ? '7 5' : undefined,
+          stroke: itemFoiLiberado(variavel.reference, passo.heap)
+            ? '#ff8ca1'
+            : estaDestacada
+              ? '#6ee7ff'
+              : '#53c8ff',
+          strokeWidth: estaDestacada ? 3 : 2,
+          strokeDasharray: estaDestacada ? '7 5' : undefined,
         },
       });
     });
   });
 
-  let graph: MemoryGraphResult = { nodes, edges };
+  let grafo: ResultadoGrafoMemoria = { nodes: nos, edges: arestas };
 
-  for (const plugin of defaultVisualizationPlugins) {
+  for (const plugin of pluginsPadraoVisualizacao) {
     if (plugin.decorate) {
-      graph = plugin.decorate({ graph, step, previousStep, diff, language });
+      grafo = plugin.decorate({
+        graph: grafo,
+        step: passo,
+        previousStep: passoAnterior,
+        diff: diferenca,
+        language: linguagem,
+      });
     }
   }
 
-  const pluginMessages = defaultVisualizationPlugins.flatMap((plugin) =>
-    plugin.describe ? plugin.describe({ graph, step, previousStep, diff, language }) : [],
+  const mensagensPlugins = pluginsPadraoVisualizacao.flatMap((plugin) =>
+    plugin.describe
+      ? plugin.describe({
+          graph: grafo,
+          step: passo,
+          previousStep: passoAnterior,
+          diff: diferenca,
+          language: linguagem,
+        })
+      : [],
   );
 
   return {
-    ...graph,
-    pluginMessages,
+    ...grafo,
+    pluginMessages: mensagensPlugins,
   };
 }

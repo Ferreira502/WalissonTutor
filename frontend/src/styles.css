@@ -42,7 +42,7 @@ body {
   font-family: 'DM Sans', sans-serif;
   background: var(--bg);
   display: grid;
-  grid-template-rows: 56px minmax(0, 1fr) 46px;
+  grid-template-rows: 54px minmax(0, 1fr) 62px;
 }
 
 .app.lightTheme {
@@ -128,7 +128,7 @@ body {
   min-height: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: minmax(360px, 40%) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 36%) minmax(0, 1fr);
 }
 
 .panel {
@@ -142,17 +142,17 @@ body {
 
 .sourceFrame {
   display: grid;
-  grid-template-columns: 132px minmax(0, 1fr);
+  grid-template-columns: 96px minmax(0, 1fr);
   height: 100%;
 }
 
 .sourceMenu {
   border-right: 1px solid var(--line);
   background: var(--surface-alt);
-  padding: 12px 10px;
+  padding: 10px 6px;
   display: grid;
   align-content: start;
-  gap: 16px;
+  gap: 12px;
 }
 
 .sourceMenuLabel {
@@ -162,14 +162,14 @@ body {
 
 .sourceStatusList {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .sourceStatusCard {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.08);
-  padding: 10px 8px;
+  padding: 7px 6px;
   display: grid;
   gap: 4px;
 }
@@ -180,7 +180,7 @@ body {
 }
 
 .sourceStatusCard strong {
-  font-size: 0.82rem;
+  font-size: 0.76rem;
   line-height: 1.25;
 }
 
@@ -188,7 +188,7 @@ body {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 46px minmax(0, 1fr);
+  grid-template-rows: 40px minmax(0, 1fr);
 }
 
 .toolbar,
@@ -200,7 +200,7 @@ body {
 }
 
 .toolbar {
-  padding: 0 14px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-alt);
 }
@@ -222,8 +222,8 @@ body {
 }
 
 .toolbar nav button {
-  padding: 5px 10px;
-  font-size: 0.78rem;
+  padding: 4px 9px;
+  font-size: 0.74rem;
 }
 
 .toolbar nav button.active {
@@ -312,13 +312,13 @@ body {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: 46px minmax(0, 1fr);
+  grid-template-rows: 40px minmax(0, 1fr);
   background: var(--surface-dark);
 }
 
 .visualHead {
   justify-content: space-between;
-  padding: 0 14px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--line);
   background: var(--surface-alt);
 }
@@ -338,7 +338,7 @@ body {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 10px;
+  padding: 4px 9px;
   border: 1px solid var(--line);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.03);
@@ -369,7 +369,7 @@ body {
 }
 
 .empty {
-  height: calc(100% - 40px);
+  height: calc(100% - 24px);
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -380,8 +380,8 @@ body {
 }
 
 .empty > span {
-  width: 60px;
-  height: 60px;
+  width: 48px;
+  height: 48px;
   border: 1px solid var(--line);
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.03);
@@ -390,22 +390,22 @@ body {
 }
 
 .empty > span svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   color: var(--primary);
 }
 
 .empty h3 {
-  margin: 16px 0 6px;
-  font-size: 1rem;
+  margin: 10px 0 4px;
+  font-size: 0.9rem;
   color: var(--text);
 }
 
 .empty p {
-  max-width: 320px;
+  max-width: 290px;
   margin: 0;
-  line-height: 1.5;
-  font-size: 0.85rem;
+  line-height: 1.4;
+  font-size: 0.78rem;
 }
 
 .error {
@@ -427,17 +427,17 @@ body {
 .memoryView {
   min-height: 0;
   overflow: auto;
-  padding: 12px;
+  padding: 14px;
   display: grid;
-  grid-template-rows: auto auto minmax(220px, 1fr) auto;
-  gap: 12px;
+  grid-template-rows: auto auto minmax(260px, 1fr) auto;
+  gap: 14px;
 }
 
 .focusBanner {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface-alt);
-  padding: 12px 14px;
+  padding: 10px 12px;
 }
 
 .focusBannerLine {
@@ -476,20 +476,49 @@ body {
 }
 
 .memorySummary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.memorySummaryMain {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
+}
+
+.memoryInsight {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px 10px;
+  min-width: 280px;
+  max-width: 380px;
+}
+
+.memoryInsight b {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 0.78rem;
+}
+
+.memoryInsight span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
 }
 
 .memorySummaryStats {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
+  justify-content: flex-end;
+  max-width: 360px;
 }
 
 .memoryCanvas {
-  min-height: 260px;
+  min-height: 320px;
   border: 1px solid var(--line);
   border-radius: 14px;
   overflow: hidden;
@@ -502,7 +531,7 @@ body {
 }
 
 .memoryCanvas::before {
-  content: 'STACK                               HEAP';
+  content: 'STACK                              HEAP';
   position: absolute;
   top: 12px;
   left: 16px;
@@ -513,43 +542,11 @@ body {
   pointer-events: none;
 }
 
-.memoryTooltip {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 5;
-  width: min(300px, calc(100% - 24px));
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--surface-alt);
-  display: flex;
-  gap: 8px;
-}
-
-.memoryTooltip svg {
-  width: 15px;
-  height: 15px;
-  color: var(--info);
-  flex: none;
-}
-
-.memoryTooltip b {
-  display: block;
-  margin-bottom: 4px;
-  font-size: 0.8rem;
-}
-
-.memoryTooltip span {
-  color: var(--muted);
-  font-size: 0.74rem;
-  line-height: 1.45;
-}
-
 .memoryMetaGrid {
   display: grid;
-  grid-template-columns: minmax(250px, 320px) 1fr;
+  grid-template-columns: minmax(220px, 280px) 1fr;
   gap: 12px;
+  align-items: stretch;
 }
 
 .metaCard {
@@ -557,6 +554,7 @@ body {
   border-radius: 12px;
   background: var(--surface-alt);
   padding: 12px;
+  min-height: 168px;
 }
 
 .metaList {
@@ -621,7 +619,7 @@ body {
   display: flex;
   align-items: center;
   gap: 9px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .title > svg {
@@ -648,7 +646,7 @@ body {
 }
 
 .react-flow__renderer {
-  padding-top: 24px;
+  padding-top: 18px;
 }
 
 .react-flow__panel.react-flow__controls {
@@ -669,6 +667,14 @@ body {
   fill: rgba(0, 0, 0, 0.5);
 }
 
+.react-flow__edges {
+  z-index: 1 !important;
+}
+
+.react-flow__node {
+  z-index: 3 !important;
+}
+
 .diagramNode {
   height: 100%;
   border: 1px solid var(--line);
@@ -681,15 +687,15 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 38px;
-  padding: 10px 12px;
+  min-height: 32px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
   font-family: 'JetBrains Mono', monospace;
 }
 
 .diagramNodeHeader b {
-  font-size: 0.76rem;
+  font-size: 0.72rem;
 }
 
 .diagramNodeHeader em,
@@ -705,15 +711,15 @@ body {
 }
 
 .diagramNodeBody {
-  padding: 10px;
+  padding: 8px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .stackVarRow {
   position: relative;
-  min-height: 60px;
-  padding: 10px;
+  min-height: 48px;
+  padding: 8px;
   border-radius: 10px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
@@ -746,7 +752,7 @@ body {
 }
 
 .stackVarMeta b {
-  font-size: 0.8rem;
+  font-size: 0.74rem;
 }
 
 .stackVarValue {
@@ -756,10 +762,10 @@ body {
 }
 
 .stackVarValue code {
-  padding: 5px 8px;
+  padding: 4px 7px;
   border-radius: 6px;
   background: rgba(114, 100, 216, 0.18);
-  font-size: 0.74rem;
+  font-size: 0.7rem;
 }
 
 .stackVarValue small,
@@ -770,14 +776,14 @@ body {
 
 .heapArray {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
   gap: 8px;
 }
 
 .heapArrayCell {
   position: relative;
-  min-height: 70px;
-  padding: 8px;
+  min-height: 58px;
+  padding: 6px;
   border-radius: 8px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
@@ -802,7 +808,7 @@ body {
 }
 
 .heapArrayCell strong {
-  font-size: 0.88rem;
+  font-size: 0.78rem;
 }
 
 .heapArrayCell code {
@@ -822,7 +828,7 @@ body {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 7px 9px;
   border-radius: 8px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
@@ -857,8 +863,8 @@ footer {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 16px;
-  padding: 0 14px;
+  gap: 12px;
+  padding: 8px 14px;
   border-top: 1px solid var(--line);
   background: var(--surface-alt);
 }
@@ -885,8 +891,8 @@ footer {
 
 .controls button,
 .runAction {
-  width: 34px;
-  height: 26px;
+  width: 36px;
+  height: 34px;
   display: grid;
   place-items: center;
 }
@@ -906,13 +912,13 @@ footer {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 6px;
-  font-size: 0.72rem;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
 }
 
 .timeline input {
   width: 100%;
-  height: 4px;
+  height: 6px;
   appearance: none;
   border-radius: 999px;
   background: linear-gradient(90deg, var(--primary) var(--p), #4a4b5d var(--p));
@@ -920,10 +926,11 @@ footer {
 
 .timeline input::-webkit-slider-thumb {
   appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--primary);
+  border: 2px solid #f0f1f6;
 }
 
 .speedGroup {
@@ -931,7 +938,7 @@ footer {
   gap: 6px;
   justify-items: end;
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.78rem;
 }
 
 .speedButtons {
@@ -940,8 +947,9 @@ footer {
 }
 
 .speedButtons button {
-  padding: 4px 8px;
-  font-size: 0.72rem;
+  min-width: 36px;
+  padding: 6px 9px;
+  font-size: 0.74rem;
 }
 
 .speedButtons button.active {
@@ -1021,5 +1029,13 @@ footer {
   .timeline > div {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .memorySummary {
+    grid-template-columns: 1fr;
+  }
+
+  .memorySummaryStats {
+    justify-content: flex-start;
   }
 }

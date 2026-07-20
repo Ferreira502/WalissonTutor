@@ -1,107 +1,107 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { PlaybackSpeed, Trace } from '../types';
+import type { Rastreamento, VelocidadeReproducao } from '../types';
 
-const STEP_DURATION_MS = 1500;
+const DURACAO_PASSO_MS = 1500;
 
-function clamp(index: number, max: number) {
-  return Math.min(Math.max(index, 0), max);
+function limitarIndice(indice: number, maximo: number) {
+  return Math.min(Math.max(indice, 0), maximo);
 }
 
-export function useExecutionTimeline(trace: Trace | null) {
-  const [stepIndex, setStepIndex] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState<PlaybackSpeed>(1);
-  const [animationKey, setAnimationKey] = useState(0);
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const transitionTimerRef = useRef<number | null>(null);
+export function useLinhaDoTempoExecucao(rastreamento: Rastreamento | null) {
+  const [indicePasso, definirIndicePasso] = useState(0);
+  const [reproduzindo, definirReproduzindo] = useState(false);
+  const [velocidade, definirVelocidade] = useState<VelocidadeReproducao>(1);
+  const [chaveAnimacao, definirChaveAnimacao] = useState(0);
+  const [emTransicao, definirEmTransicao] = useState(false);
+  const temporizadorTransicaoRef = useRef<number | null>(null);
 
-  const maxIndex = Math.max(0, (trace?.steps.length ?? 1) - 1);
-
-  useEffect(() => {
-    setStepIndex(0);
-    setPlaying(false);
-    setAnimationKey(0);
-    setIsTransitioning(false);
-  }, [trace?.id]);
+  const indiceMaximo = Math.max(0, (rastreamento?.steps.length ?? 1) - 1);
 
   useEffect(() => {
-    if (transitionTimerRef.current) {
-      window.clearTimeout(transitionTimerRef.current);
+    definirIndicePasso(0);
+    definirReproduzindo(false);
+    definirChaveAnimacao(0);
+    definirEmTransicao(false);
+  }, [rastreamento?.id]);
+
+  useEffect(() => {
+    if (temporizadorTransicaoRef.current) {
+      window.clearTimeout(temporizadorTransicaoRef.current);
     }
 
-    setAnimationKey((value) => value + 1);
-    setIsTransitioning(true);
-    transitionTimerRef.current = window.setTimeout(() => {
-      setIsTransitioning(false);
-    }, STEP_DURATION_MS / speed);
+    definirChaveAnimacao((valorAtual) => valorAtual + 1);
+    definirEmTransicao(true);
+    temporizadorTransicaoRef.current = window.setTimeout(() => {
+      definirEmTransicao(false);
+    }, DURACAO_PASSO_MS / velocidade);
 
     return () => {
-      if (transitionTimerRef.current) {
-        window.clearTimeout(transitionTimerRef.current);
+      if (temporizadorTransicaoRef.current) {
+        window.clearTimeout(temporizadorTransicaoRef.current);
       }
     };
-  }, [speed, stepIndex]);
+  }, [indicePasso, velocidade]);
 
   useEffect(() => {
-    if (!playing || !trace) {
+    if (!reproduzindo || !rastreamento) {
       return undefined;
     }
 
-    const timer = window.setInterval(() => {
-      setStepIndex((currentIndex) => {
-        if (currentIndex >= maxIndex) {
-          setPlaying(false);
-          return currentIndex;
+    const temporizador = window.setInterval(() => {
+      definirIndicePasso((indiceAtual) => {
+        if (indiceAtual >= indiceMaximo) {
+          definirReproduzindo(false);
+          return indiceAtual;
         }
 
-        return currentIndex + 1;
+        return indiceAtual + 1;
       });
-    }, STEP_DURATION_MS / speed);
+    }, DURACAO_PASSO_MS / velocidade);
 
-    return () => window.clearInterval(timer);
-  }, [maxIndex, playing, speed, trace]);
+    return () => window.clearInterval(temporizador);
+  }, [indiceMaximo, reproduzindo, rastreamento, velocidade]);
 
-  const goToStep = useCallback(
-    (nextIndex: number) => {
-      setStepIndex(clamp(nextIndex, maxIndex));
+  const irParaPasso = useCallback(
+    (proximoIndice: number) => {
+      definirIndicePasso(limitarIndice(proximoIndice, indiceMaximo));
     },
-    [maxIndex],
+    [indiceMaximo],
   );
 
-  const next = useCallback(() => {
-    setStepIndex((currentIndex) => clamp(currentIndex + 1, maxIndex));
-  }, [maxIndex]);
+  const avancar = useCallback(() => {
+    definirIndicePasso((indiceAtual) => limitarIndice(indiceAtual + 1, indiceMaximo));
+  }, [indiceMaximo]);
 
-  const previous = useCallback(() => {
-    setStepIndex((currentIndex) => clamp(currentIndex - 1, maxIndex));
-  }, [maxIndex]);
+  const voltar = useCallback(() => {
+    definirIndicePasso((indiceAtual) => limitarIndice(indiceAtual - 1, indiceMaximo));
+  }, [indiceMaximo]);
 
-  const reset = useCallback(() => {
-    setStepIndex(0);
-    setPlaying(false);
+  const reiniciar = useCallback(() => {
+    definirIndicePasso(0);
+    definirReproduzindo(false);
   }, []);
 
-  const timelineProgress = useMemo(() => {
-    if (!trace || trace.steps.length <= 1) {
+  const progressoLinhaDoTempo = useMemo(() => {
+    if (!rastreamento || rastreamento.steps.length <= 1) {
       return 0;
     }
 
-    return stepIndex / (trace.steps.length - 1);
-  }, [stepIndex, trace]);
+    return indicePasso / (rastreamento.steps.length - 1);
+  }, [indicePasso, rastreamento]);
 
   return {
-    stepIndex,
-    setStepIndex: goToStep,
-    playing,
-    setPlaying,
-    speed,
-    setSpeed,
-    animationKey,
-    isTransitioning,
-    next,
-    previous,
-    reset,
-    timelineProgress,
-    maxIndex,
+    indicePasso,
+    definirIndicePasso: irParaPasso,
+    reproduzindo,
+    definirReproduzindo,
+    velocidade,
+    definirVelocidade,
+    chaveAnimacao,
+    emTransicao,
+    avancar,
+    voltar,
+    reiniciar,
+    progressoLinhaDoTempo,
+    indiceMaximo,
   };
 }

@@ -1,26 +1,26 @@
 import type { Edge, Node } from '@xyflow/react';
-import type { Language, Step, StepDiff } from './types';
+import type { DiferencaPasso, Linguagem, Passo } from './types';
 
-export interface MemoryGraphResult {
+export interface ResultadoGrafoMemoria {
   nodes: Node[];
   edges: Edge[];
 }
 
-export interface VisualizationPluginContext {
-  graph: MemoryGraphResult;
-  step: Step;
-  previousStep: Step | null;
-  diff: StepDiff;
-  language: Language;
+export interface ContextoPluginVisualizacao {
+  graph: ResultadoGrafoMemoria;
+  step: Passo;
+  previousStep: Passo | null;
+  diff: DiferencaPasso;
+  language: Linguagem;
 }
 
-export interface VisualizationPlugin {
+export interface PluginVisualizacao {
   id: string;
-  decorate?(context: VisualizationPluginContext): MemoryGraphResult;
-  describe?(context: VisualizationPluginContext): string[];
+  decorate?(context: ContextoPluginVisualizacao): ResultadoGrafoMemoria;
+  describe?(context: ContextoPluginVisualizacao): string[];
 }
 
-const pointerPulsePlugin: VisualizationPlugin = {
+const pluginPulsoPonteiro: PluginVisualizacao = {
   id: 'pointer-pulse',
   decorate: ({ diff, graph }) => ({
     ...graph,
@@ -42,9 +42,9 @@ const pointerPulsePlugin: VisualizationPlugin = {
     diff.referenceEdges.length > 0 ? ['Seta de referencia destacada para mostrar o fluxo do ponteiro.'] : [],
 };
 
-const stdoutPlugin: VisualizationPlugin = {
+const pluginSaidaPadrao: PluginVisualizacao = {
   id: 'stdout-glow',
   describe: ({ diff }) => (diff.stdoutDelta ? [`Saida gerada neste passo: ${diff.stdoutDelta.trim()}`] : []),
 };
 
-export const defaultVisualizationPlugins: VisualizationPlugin[] = [pointerPulsePlugin, stdoutPlugin];
+export const pluginsPadraoVisualizacao: PluginVisualizacao[] = [pluginPulsoPonteiro, pluginSaidaPadrao];
