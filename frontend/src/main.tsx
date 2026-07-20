@@ -33,7 +33,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useExecutionTimeline } from './hooks/useExecutionTimeline';
 import { samples } from './samples';
-import type { HeapItem, Language, PlaybackSpeed, StackFrame, Step, Variable } from './types';
+import type { HeapItem, Language, PlaybackSpeed, StackFrame, Step, Trace, Variable } from './types';
 import { buildMemoryGraph, buildStepDiff } from './visualization';
 import './styles.css';
 
@@ -42,6 +42,13 @@ const languageLabels: Record<Language, string> = {
   cpp: 'C++',
   java: 'Java',
 };
+
+const statusLabels = {
+  idle: 'Nao iniciado',
+  running: 'Executando',
+  done: 'Concluido',
+  error: 'Erro',
+} as const;
 
 type StepAnalysis = ReturnType<typeof buildStepDiff>;
 
@@ -64,7 +71,7 @@ type HeapBlockNodeData = {
 function CodeVisualizerApp() {
   const [selectedLanguage, setSelectedLanguage] = useState<Language>('cpp');
   const [sourceCode, setSourceCode] = useState(samples.cpp);
-  const [trace, setTrace] = useState<import('./types').Trace | null>(null);
+  const [trace, setTrace] = useState<Trace | null>(null);
   const [executionStatus, setExecutionStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [executionError, setExecutionError] = useState('');
   const [lineTooltipVisible, setLineTooltipVisible] = useState(false);
@@ -150,7 +157,7 @@ function CodeVisualizerApp() {
       setExecutionStatus('done');
     } catch (error) {
       setExecutionStatus('error');
-      setExecutionError(error instanceof Error ? error.message : 'Falha na execução');
+      setExecutionError(error instanceof Error ? error.message : 'Falha na execucao');
     }
   }
 
@@ -164,13 +171,24 @@ function CodeVisualizerApp() {
   }
 
   const playbackSpeeds: PlaybackSpeed[] = [0.5, 1, 2, 4];
+  const currentFileName = selectedLanguage === 'java' ? 'Main.java' : selectedLanguage === 'cpp' ? 'main.cpp' : 'main.c';
+  const currentLineLabel = currentDiff ? currentDiff.currentLineLabel : 'Aguardando execucao';
 
   return (
     <div className={`app ${lightModeEnabled ? 'lightTheme' : ''}`}>
-      <header>
-        <div className="brand brandMinimal">
-          <b>WALISSONTUTOR</b>
+      <header className="topbar">
+        <div className="brandBlock">
+          <div className="brand brandMinimal">
+            <b>WalissonTutor</b>
+          </div>
+          <small>Editor lateral com visualizacao em tempo real.</small>
         </div>
+
+        <nav className="topnav" aria-label="Navegacao principal">
+          <a href="#editor" className="active">Codigo</a>
+          <a href="#memoria">Visualizacao</a>
+          <a href="#controle">Passos</a>
+        </nav>
 
         <button
           type="button"
@@ -183,87 +201,93 @@ function CodeVisualizerApp() {
         </button>
       </header>
 
-      <main>
-        <section className="panel source">
-          <div className="toolbar">
-            <nav aria-label="Escolha de linguagem">
-              {(['c', 'cpp', 'java'] as Language[]).map((language) => (
-                <button
-                  key={language}
-                  type="button"
-                  className={language === selectedLanguage ? 'active' : ''}
-                  aria-pressed={language === selectedLanguage}
-                  onClick={() => changeLanguage(language)}
-                >
-                  {languageLabels[language]}
+      <main className="dashboard">
+        <section className="panel source" id="editor">
+          <div className="sourceFrame">
+            <aside className="sourceMenu">
+              <span className="sourceMenuLabel">Home</span>
+
+              <div className="sourceStatusList">
+                <div className="sourceStatusCard">
+                  <span>Linguagem</span>
+                  <strong>{languageLabels[selectedLanguage]}</strong>
+                </div>
+
+                <div className="sourceStatusCard">
+                  <span>Status</span>
+                  <strong>{statusLabels[executionStatus]}</strong>
+                </div>
+
+                <div className="sourceStatusCard">
+                  <span>Passos</span>
+                  <strong>{trace ? `${timeline.stepIndex + 1}/${trace.steps.length}` : '0/0'}</strong>
+                </div>
+              </div>
+            </aside>
+
+            <div className="sourceContent">
+              <div className="toolbar">
+                <nav aria-label="Escolha de linguagem">
+                  {(['c', 'cpp', 'java'] as Language[]).map((language) => (
+                    <button
+                      key={language}
+                      type="button"
+                      className={language === selectedLanguage ? 'active' : ''}
+                      aria-pressed={language === selectedLanguage}
+                      onClick={() => changeLanguage(language)}
+                    >
+                      {languageLabels[language]}
+                    </button>
+                  ))}
+                </nav>
+
+                <code>{currentFileName}</code>
+
+                <button className="restore" type="button" onClick={() => setSourceCode(samples[selectedLanguage])}>
+                  <RotateCcw />
+                  Restaurar exemplo
                 </button>
-              ))}
-            </nav>
+              </div>
 
-            <code>{selectedLanguage === 'java' ? 'Main.java' : selectedLanguage === 'cpp' ? 'main.cpp' : 'main.c'}</code>
+              <div className="editorWrap">
+                <div className={`lineTooltip ${lineTooltipVisible ? 'visible' : ''}`}>
+                  {currentStep ? `Executando: ${currentDiff?.currentLineLabel}` : 'Pronto para executar'}
+                </div>
 
-            <button className="restore" type="button" onClick={() => setSourceCode(samples[selectedLanguage])}>
-              <RotateCcw />
-              Restaurar exemplo
-            </button>
-          </div>
-
-          <div className="editorWrap">
-            <div className={`lineTooltip ${lineTooltipVisible ? 'visible' : ''}`}>
-              {currentStep ? `Executando: ${currentDiff?.currentLineLabel}` : 'Pronto para executar'}
+                <div className="editor">
+                  <Editor
+                    language={selectedLanguage === 'cpp' ? 'cpp' : selectedLanguage}
+                    value={sourceCode}
+                    onMount={handleEditorMount}
+                    onChange={(value) => setSourceCode(value ?? '')}
+                    theme={lightModeEnabled ? 'vs' : 'vs-dark'}
+                    options={{
+                      fontSize: 14,
+                      fontFamily: 'JetBrains Mono',
+                      minimap: { enabled: false },
+                      padding: { top: 18 },
+                      scrollBeyondLastLine: false,
+                      automaticLayout: true,
+                      lineNumbersMinChars: 3,
+                      glyphMargin: true,
+                    }}
+                  />
+                </div>
+              </div>
             </div>
-
-            <div className="editor">
-              <Editor
-                language={selectedLanguage === 'cpp' ? 'cpp' : selectedLanguage}
-                value={sourceCode}
-                onMount={handleEditorMount}
-                onChange={(value) => setSourceCode(value ?? '')}
-                theme={lightModeEnabled ? 'vs' : 'vs-dark'}
-                options={{
-                  fontSize: 14,
-                  fontFamily: 'JetBrains Mono',
-                  minimap: { enabled: false },
-                  padding: { top: 18 },
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                  lineNumbersMinChars: 3,
-                  glyphMargin: true,
-                }}
-              />
-            </div>
-          </div>
-
-          <div className="runbar">
-            <span>
-              <Gauge />
-              128 MB · limite de 5 s · rede desativada
-            </span>
-
-            <button type="button" onClick={runTrace} disabled={executionStatus === 'running'}>
-              {executionStatus === 'running' ? <i className="spinner" /> : <Play />}
-              {executionStatus === 'running' ? 'Rastreando...' : 'Executar visualização'}
-              <kbd>Ctrl + Enter</kbd>
-            </button>
           </div>
         </section>
 
-        <section className="panel visual">
+        <section className="panel visual" id="memoria">
           <div className="visualHead">
             <div>
-              <small>RASTREAMENTO DA EXECUÇÃO</small>
+              <small>EXECUCAO</small>
               <h2>{currentStep ? currentStep.explanation : 'Pronto para rastrear'}</h2>
             </div>
 
             <span className={`badge ${executionStatus}`}>
               {executionStatus === 'done' ? <CheckCircle2 /> : executionStatus === 'error' ? <AlertCircle /> : <i />}
-              {executionStatus === 'done'
-                ? 'Concluído'
-                : executionStatus === 'running'
-                  ? 'Executando'
-                  : executionStatus === 'error'
-                    ? 'Erro'
-                    : 'Não iniciado'}
+              {statusLabels[executionStatus]}
             </span>
           </div>
 
@@ -273,8 +297,8 @@ function CodeVisualizerApp() {
                 <Play />
               </span>
 
-              <h3>Animação passo a passo</h3>
-              <p>Execute o exemplo para ver a stack nascer, a heap crescer e as referências apontarem para a memória.</p>
+              <h3>Execucao passo a passo</h3>
+              <p>Execute o exemplo para ver a stack, a heap e as referencias mudando ao longo da execucao.</p>
             </div>
           )}
 
@@ -283,7 +307,7 @@ function CodeVisualizerApp() {
               <AlertCircle />
 
               <div>
-                <b>Execução interrompida</b>
+                <b>Execucao interrompida</b>
                 <pre>{executionError}</pre>
               </div>
             </div>
@@ -303,12 +327,18 @@ function CodeVisualizerApp() {
         </section>
       </main>
 
-      <footer>
+      <footer id="controle">
         <div className="controls">
+          <span className={`footerStatus ${executionStatus}`}>{statusLabels[executionStatus]}</span>
+
+          <button type="button" onClick={runTrace} disabled={executionStatus === 'running'} className="runAction">
+            {executionStatus === 'running' ? <i className="spinner" /> : <Play />}
+          </button>
+
           <button
             type="button"
             title="Reiniciar"
-            aria-label="Reiniciar animação"
+            aria-label="Reiniciar animacao"
             onClick={timeline.reset}
             disabled={!trace || timeline.stepIndex === 0}
           >
@@ -328,7 +358,7 @@ function CodeVisualizerApp() {
           <button
             type="button"
             title={timeline.playing ? 'Pausar' : 'Reproduzir'}
-            aria-label={timeline.playing ? 'Pausar animação' : 'Reproduzir animação'}
+            aria-label={timeline.playing ? 'Pausar animacao' : 'Reproduzir animacao'}
             className="play"
             onClick={() => timeline.setPlaying((isPlaying) => !isPlaying)}
             disabled={!trace}
@@ -338,8 +368,8 @@ function CodeVisualizerApp() {
 
           <button
             type="button"
-            title="Próximo passo"
-            aria-label="Próximo passo"
+            title="Proximo passo"
+            aria-label="Proximo passo"
             onClick={timeline.next}
             disabled={!trace || timeline.stepIndex === timeline.maxIndex}
           >
@@ -350,7 +380,7 @@ function CodeVisualizerApp() {
         <div className="timeline">
           <div>
             <b>{trace ? `Passo ${timeline.stepIndex + 1} de ${trace.steps.length}` : 'Nenhum rastreamento carregado'}</b>
-            <span>{currentDiff ? currentDiff.currentLineLabel : 'Execute o código para começar'}</span>
+            <span>{currentLineLabel}</span>
           </div>
 
           <input
@@ -358,7 +388,7 @@ function CodeVisualizerApp() {
             min="0"
             max={timeline.maxIndex}
             value={timeline.stepIndex}
-            aria-label="Linha do tempo da execução"
+            aria-label="Linha do tempo da execucao"
             disabled={!trace}
             onChange={(event) => timeline.setStepIndex(Number(event.target.value))}
             style={{ '--p': `${timeline.timelineProgress * 100}%` } as React.CSSProperties}
@@ -366,9 +396,9 @@ function CodeVisualizerApp() {
         </div>
 
         <label className="speedGroup">
-          <span>Velocidade</span>
+          <span>{currentFileName}</span>
 
-          <div className="speedButtons" role="radiogroup" aria-label="Velocidade da animação">
+          <div className="speedButtons" role="radiogroup" aria-label="Velocidade da animacao">
             {playbackSpeeds.map((speedOption) => (
               <button
                 key={speedOption}
@@ -469,7 +499,7 @@ function MemoryDiagram({
         <div className="focusBannerLine">
           <WandSparkles />
           <b>{diff.currentLineLabel}</b>
-          <span>{isTransitioning ? 'Animando alterações...' : 'Estado estabilizado'}</span>
+          <span>{isTransitioning ? 'Atualizando alteracoes...' : 'Estado estabilizado'}</span>
         </div>
 
         <div className="focusBannerTargets">
@@ -480,7 +510,7 @@ function MemoryDiagram({
       </animated.div>
 
       <div className="memorySummary">
-        <Title icon={<Layers3 />} title="Mapa de memória" sub="Timeline, foco e referências animadas" />
+        <Title icon={<Layers3 />} title="Mapa de memoria" sub="Leitura simples da stack, heap e referencias" />
 
         <div className="memorySummaryStats">
           <span>{step.stack.length} frame(s)</span>
@@ -490,7 +520,7 @@ function MemoryDiagram({
         </div>
       </div>
 
-      <div className="memoryCanvas" aria-label="Diagrama interativo da memória">
+      <div className="memoryCanvas" aria-label="Diagrama interativo da memoria">
         <ReactFlowProvider>
           <ReactFlow
             nodes={memoryGraph.nodes}
@@ -526,7 +556,7 @@ function MemoryDiagram({
 
       <div className="memoryMetaGrid">
         <section className="metaCard">
-          <Title icon={<Box />} title="Timeline de mudanças" sub="Antes e depois do passo atual" />
+          <Title icon={<Box />} title="Mudancas do passo" sub="Antes e depois do estado atual" />
 
           <div className="metaList">
             {diff.narrative.concat(memoryGraph.pluginMessages).slice(0, 5).map((message) => (
@@ -539,7 +569,7 @@ function MemoryDiagram({
         </section>
 
         <section className="metaCard">
-          <Title icon={<Terminal />} title="Saída padrão" sub="Animada por passo" />
+          <Title icon={<Terminal />} title="Saida padrao" sub="Texto gerado na execucao" />
           <AnimatedStdout value={step.stdout} delta={diff.stdoutDelta} animationKey={animationKey} />
         </section>
       </div>
@@ -634,9 +664,7 @@ function StackVariableRow({
         await next({
           scale: 1.02,
           background: isNewVariable ? 'rgba(102, 221, 177, 0.16)' : 'rgba(130, 103, 240, 0.18)',
-          boxShadow: isNewVariable
-            ? '0 0 22px rgba(102, 221, 177, 0.2)'
-            : '0 0 22px rgba(130, 103, 240, 0.18)',
+          boxShadow: isNewVariable ? '0 0 22px rgba(102, 221, 177, 0.2)' : '0 0 22px rgba(130, 103, 240, 0.18)',
         });
       }
 
@@ -652,9 +680,7 @@ function StackVariableRow({
 
   return (
     <animated.div className={`stackVarRow ${isChangedVariable ? 'changed' : ''}`} style={variableAnimation}>
-      {variable.address && (
-        <Handle type="target" id={`stack:${variable.address}`} position={Position.Left} className="memoryHandle" />
-      )}
+      {variable.address && <Handle type="target" id={`stack:${variable.address}`} position={Position.Left} className="memoryHandle" />}
 
       {variable.reference && (
         <Handle type="source" id={`ref:${variable.name}:${variable.reference}`} position={Position.Right} className="memoryHandle source" />
@@ -664,11 +690,11 @@ function StackVariableRow({
         <span>{variable.type}</span>
         <b>{variable.name}</b>
 
-        {!previousVariable && <small className="valueDelta">nova variável na stack</small>}
+        {!previousVariable && <small className="valueDelta">nova variavel na stack</small>}
 
         {previousVariable && hasMeaningfulChange && (
           <small className="valueDelta">
-            antes: {String(previousVariable.value)} → agora: {String(variable.value)}
+            antes: {String(previousVariable.value)} -&gt; agora: {String(variable.value)}
           </small>
         )}
       </div>
@@ -686,11 +712,7 @@ function HeapBlockNode({ data }: NodeProps<Node<HeapBlockNodeData>>) {
   const isChangedAllocation = data.diff.changedHeapAddresses.includes(data.item.address);
   const isFreedAllocation = data.diff.freedHeapAddresses.includes(data.item.address);
 
-  const changedIndexes = new Set(
-    (data.item.values ?? []).flatMap((value, index) =>
-      data.previousItem?.values?.[index] !== value ? [index] : [],
-    ),
-  );
+  const changedIndexes = new Set((data.item.values ?? []).flatMap((value, index) => (data.previousItem?.values?.[index] !== value ? [index] : [])));
 
   const blockAnimation = useSpring({
     from: {
@@ -764,11 +786,11 @@ function HeapBlockNode({ data }: NodeProps<Node<HeapBlockNodeData>>) {
           </div>
         )}
 
-        {!data.previousItem && <small className="heapDelta">alocação criada neste passo</small>}
+        {!data.previousItem && <small className="heapDelta">alocacao criada neste passo</small>}
 
         {data.previousItem && (isChangedAllocation || isFreedAllocation) && (
           <small className="heapDelta">
-            antes: {serializeHeapPreview(data.previousItem)} · agora: {serializeHeapPreview(data.item)}
+            antes: {serializeHeapPreview(data.previousItem)} | agora: {serializeHeapPreview(data.item)}
           </small>
         )}
 
@@ -818,7 +840,7 @@ function AnimatedStdout({
 
   return (
     <animated.div className="stdoutPanel" style={stdoutAnimation} key={animationKey}>
-      <pre className="stdoutBox">{value || 'Aguardando saída...'}</pre>
+      <pre className="stdoutBox">{value || 'Aguardando saida...'}</pre>
 
       <div className="stdoutDeltaWrap">
         {deltaTransition((style, item) => (
@@ -869,7 +891,7 @@ function Title({
 const appContainer = document.getElementById('app');
 
 if (!appContainer) {
-  throw new Error('Elemento de montagem #app não encontrado.');
+  throw new Error('Elemento de montagem #app nao encontrado.');
 }
 
 createRoot(appContainer).render(<CodeVisualizerApp />);
